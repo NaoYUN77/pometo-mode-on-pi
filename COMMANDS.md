@@ -8,7 +8,7 @@
 - **想指定打法用 playbook**，比如 `/bug-fix`，你选剧本，它守纪律。
 - **想让它自己判断用 `/poteto-mode`**，它匹配剧本。
 
-全部是裸命令，选择权在你。`/routes` 按类型列出 23 个 playbook 和每个的中文说明。
+全部是直接敲的命令，选择权在你。`/routes` 按类型列出 23 个 playbook 和每个的中文说明。
 
 ---
 
@@ -148,8 +148,8 @@
 
 | 命令 | 什么时候 |
 | --- | --- |
-| `/autonomous-run` | 一个任务跑到谓词为止。**它替你定义 done** |
-| `/orchestrate` | 常驻项目：多天、多 stack PR、一队子代理 |
+| `/autonomous-run` | 一个任务一直跑到你定的那条标准成立。标准得能验真假，比如「测试全绿」 |
+| `/orchestrate` | 长期项目：多天、多 stack PR、一队子代理 |
 | `/autopilot-full` | 一串独立 PR 全自动跑到 merged |
 | `/autopilot-stack` | 全自动建并验证一条线性栈，交给人合 |
 
@@ -157,10 +157,10 @@
 
 | 命令 | 什么时候 |
 | --- | --- |
-| `/session-pickup` | 接手别人（或昨天的自己）的在飞工作 |
-| `/pause-safely` | 干净挂起：安全边界停、取消子代理、`wip:` 提交、写 resume note |
-| `/worktree-cleanup` | 剪掉已合或废弃的 worktree、过期模拟器 |
-| `/eval` | 盲测一个技能/提示词改动对 agent 行为的影响 |
+| `/session-pickup` | 接手别人（或昨天的自己）没做完的活 |
+| `/pause-safely` | 干净停下：安全边界停、取消子代理、`wip:` 提交、写一份接着干的说明 |
+| `/worktree-cleanup` | 清掉已合或废弃的 worktree、过期模拟器 |
+| `/eval` | 在不知情的前提下测一个技能/提示词改动对 agent 行为的影响 |
 | `/authoring-a-skill` | 写或改 SKILL.md |
 
 ---

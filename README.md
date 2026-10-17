@@ -191,8 +191,8 @@ MIT. The skills are pstack's, Copyright (c) 2026 Lauren Tan, MIT. See
 pstack 的工作模式，跑在 [pi](https://pi.dev) 上。你说目标，它匹配 playbook、
 守住纪律，你用短句掌舵。
 
-是移植，不是重新设计。23 个 playbook、55 个 skill、24 条原则、7 个 subagent 席位，
-以及裸命令 `/how` `/bug-fix`，全部来自 Lauren Tan 的
+是移植，不是重新设计。23 个 playbook、55 个 skill、24 条原则、7 个 subagent 档位，
+以及直接敲的命令 `/how` `/bug-fix`，全部来自 Lauren Tan 的
 [pstack](https://github.com/cursor/plugins/tree/main/pstack) 0.15.25，按 pi 的工具
 和模型接口做了适配。
 
@@ -210,12 +210,12 @@ pi
 /routes         # 这个会话答应了哪些命令
 ```
 
-**席位不随包走。** pi 包只能带 extensions、skills、prompts、themes，没有
+**subagent 档位不随包走。** pi 包只能带 extensions、skills、prompts、themes，没有
 `agents/`。把它拷进用它的项目：
 
 ```bash
 cp -r <package>/.pi/agents your-project/.pi/agents
-bash <package>/scripts/doctor.sh   # 每个席位的 model id 都必须能解析
+bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
 ```
 
 ### 里面有什么
@@ -226,9 +226,9 @@ bash <package>/scripts/doctor.sh   # 每个席位的 model id 都必须能解析
     playbooks/           144K   23 个文件，618 行
     references/           12K   bugbot 分诊
     scripts/             271K   check-plan、worktree-audit、orch、watch-pr
-  why/                    81K   98 行 + 证据分类 playbook
+  why/                    81K   98 行 + 按证据分类的调查提示词
   reflect/                32K   67 行，三个并行审阅者
-  interrogate/            32K   74 行 + rubric 和 reviewer prompt
+  interrogate/            32K   74 行 + 评分表和审阅者提示词
   principle-*/            81K   24 条规则，共 434 行
   （其余 24 个 skill）    ~150K
 .agents/harness/pi.md      8K   104 行：Cursor 到 pi 的映射
@@ -239,9 +239,9 @@ bash <package>/scripts/doctor.sh   # 每个席位的 model id 都必须能解析
   todo.ts                297 行
   bash-guard.ts          148 行
   gh/                    141 + 130 + 178 行
-.pi/agents/               23K   7 个席位文件，每个 16 到 28 行
+.pi/agents/               23K   7 个档位文件，每个 16 到 28 行
 .pi/prompts/               4K   /poteto-mode 模板
-scripts/                  40K   doctor、check、3 个零 token 测试
+scripts/                  40K   doctor、check、3 个不花钱的测试
 ```
 
 ### 三层结构
@@ -280,16 +280,16 @@ Hillclimb 是那个循环，并且对尝试次数设了下限，免得一次早�
 
 | 命令 | 行数 | 什么时候用 |
 |---|---|---|
-| `/investigation` | 14 | 只读。交付带引用的答案，不是 diff |
-| `/runtime-forensics` | 11 | 诊断活体进程：泄漏、空转、卡顿。交付诊断，不是修复 |
-| `/trace-forensics` | 14 | 诊断别人给你的已捕获 profile。产物是固定的，不要重跑 |
+| `/investigation` | 14 | 只读。交一个有出处的答案，不是 diff |
+| `/runtime-forensics` | 11 | 诊断跑着的进程：泄漏、空转、卡顿。交诊断，不修 |
+| `/trace-forensics` | 14 | 诊断别人给你的 profile 文件。文件是死的，不要重跑 |
 
 **设计与原型 —— 180 行**
 
 | 命令 | 行数 | 什么时候用 |
 |---|---|---|
-| `/prototype` | 14 | 丢弃式草图，让实验来裁决岔路口，而不是问你 |
-| `/visual-parity` | 11 | 像素级等价。基线就是规格，image diff 说了算 |
+| `/prototype` | 14 | 扔掉也不可惜的草图，让实验来定岔路口，而不是问你 |
+| `/visual-parity` | 11 | 像素级一致。基线就是规格，image diff 说了算 |
 | `/multi-phase-plan` | 155 | 跨阶段或跨 stack PR 的活。只写计划，不实现 |
 
 **交付 —— 69 行**
@@ -297,41 +297,42 @@ Hillclimb 是那个循环，并且对尝试次数设了下限，免得一次早�
 | 命令 | 行数 | 什么时候用 |
 |---|---|---|
 | `/opening-a-pr` | 34 | 每个别的 playbook 结尾都会调它 |
-| `/babysit` | 23 | 把 PR 或 stack 开到 merge-ready。不合并 |
-| `/shipping` | 12 | 独立验证绿栈，然后从根开始合连续的那一段。**绿 ≠ 安全** |
+| `/babysit` | 23 | 把 PR 或 stack 弄到可以合。不合并 |
+| `/shipping` | 12 | 独立验一遍绿栈，然后从根开始合连着的那一段。**绿 ≠ 安全** |
 
 **长时间跑 —— 162 行**
 
 | 命令 | 行数 | 什么时候用 |
 |---|---|---|
-| `/autonomous-run` | 13 | 一个任务跑到可检验的谓词。它替你定义 done |
-| `/orchestrate` | 112 | 常驻项目：多天、多 stack PR、一队子代理 |
-| `/autopilot-full` | 25 | 一串独立 PR 跑到 merged，每个一个 owner |
+| `/autonomous-run` | 13 | 一个任务一直跑到你定的那条标准成立。标准得能验真假，比如「测试全绿」「复现脚本不再失败」 |
+| `/orchestrate` | 112 | 长期项目：多天、多 stack PR、一队子代理 |
+| `/autopilot-full` | 25 | 一串独立 PR 一路跑到 merged，每个 PR 一个负责人 |
 | `/autopilot-stack` | 12 | 同上，但交付成一条线性栈，由人来合 |
 
 **维护自己的状态 —— 70 行**
 
 | 命令 | 行数 | 什么时候用 |
 |---|---|---|
-| `/session-pickup` | 11 | 从 transcript、URL 或分支接手在飞的工作 |
-| `/pause-safely` | 10 | 干净挂起：在安全边界停、取消子代理、`wip:` 提交、写 resume note |
-| `/worktree-cleanup` | 12 | 回收磁盘：已合的 worktree、过期模拟器 |
-| `/eval` | 25 | 盲测一个 skill 或提示词改动怎么影响 agent 行为 |
+| `/session-pickup` | 11 | 接手别人（或昨天的自己）没做完的活 |
+| `/pause-safely` | 10 | 干净停下：在安全边界停、取消子代理、`wip:` 提交、写一份接着干的说明 |
+| `/worktree-cleanup` | 12 | 腾磁盘：清掉已合的 worktree、过期模拟器 |
+| `/eval` | 25 | 在不知情的前提下测一个 skill 或提示词改动怎么影响 agent 行为 |
 | `/authoring-a-skill` | 12 | 写或改 SKILL.md |
 
-没有 playbook 匹配的活走 `/figure-it-out`，它现场设计一个。超出任何单个 agent
-寿命的项目走 `/orchestrate`。
+没有 playbook 匹配的活走 `/figure-it-out`，它当场设计一个。比任何一个 agent 活得
+都长的项目走 `/orchestrate`。
 
 ### 配置模型
 
-每个角色在 `.agents/pstack-models.md` 里指定模型，每个席位文件带一个 `model:` id。
-写之前用 `pi --list-models` 核对：id 写错会让 subagent 进程直接失败，而不是静默继承。
+每个角色在 `.agents/pstack-models.md` 里指定模型，每个档位文件带一个 `model:` id。
+写之前用 `pi --list-models` 核对：id 写错会让 subagent 进程直接失败，而不是悄悄用
+父会话的模型。
 
 ```bash
 pi --list-models
 ```
 
-改完席位文件，重跑 `scripts/doctor.sh`。
+改完档位文件，重跑 `scripts/doctor.sh`。
 
 ### 验证
 
@@ -339,22 +340,22 @@ pi --list-models
 bash scripts/check.sh
 ```
 
-跑 doctor，然后跑所有不花 token 的测试：路由面（35 项，覆盖 `/routes` 的两条输出
-路径）、bash 守卫（22 项）、GitHub 工具的纯逻辑半边。打印 `check: green` 或
-`check: RED`。
+跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
+输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半。打印 `check: green`
+或 `check: RED`。
 
 ### 与 pstack 的差异
 
 列出来是因为它们改变行为。
 
-- **playbook 是裸命令。** Cursor 上只有 `/poteto-mode` 会选一个。这里 23 个全部注册，
-  路由会连同 router 一起注入。
-- **skill 有裸命令。** pi 把 skill 注册成 `/skill:<name>`；这里加了 `/how`、`/arena`
-  等，`/skill:how` 依然可用。
-- **没有常驻模式块。** `/poteto-mode` 是进入的，不是常驻的。常驻路由会让一句
-  单行提问也去匹配 playbook。
-- **席位按项目放。** pi 包带不了 `agents/`。
-- **用 `/routes` 代替市场。** 没有拷贝，列表每次加载从目录重建。
+- **playbook 也能直接敲。** Cursor 上只有 `/poteto-mode` 会选一个。这里 23 个全部
+  注册好了，路由会把 router 连同步骤一起注入。
+- **skill 也能直接敲。** pi 把 skill 注册成 `/skill:<name>`；这里加了 `/how`、
+  `/arena` 等，`/skill:how` 依然可用。
+- **没有常驻的模式块。** `/poteto-mode` 是进去的，不是一直挂着的。一直挂着的路由会
+  让一句单行提问也去匹配 playbook。
+- **档位按项目放。** pi 包带不了 `agents/`。
+- **用 `/routes` 代替插件市场。** 没有拷贝，列表每次加载从目录重建。
 
 ### 许可
 
