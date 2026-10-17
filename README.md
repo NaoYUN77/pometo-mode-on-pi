@@ -90,7 +90,8 @@ Harness adaptation, because pi has no Cursor primitives:
 ```
 
 All three are bare commands, because the choice is yours. `/routes` prints the
-whole surface. A playbook route carries the router body on purpose: the steps mean
+whole surface, and [COMMANDS.md](COMMANDS.md) organises every command by what you
+are trying to do. A playbook route carries the router body on purpose: the steps mean
 little without the mode's rules, so `/bug-fix` is the router plus Bug fix, with a
 line saying the playbook is already chosen so it does not re-match one.
 
