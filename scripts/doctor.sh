@@ -10,12 +10,11 @@ fail=0
 pass() { printf 'PASS %s\n' "$1"; }
 bad()  { printf 'FAIL %s\n' "$1"; fail=$((fail + 1)); }
 
-# 1. The mode block, which is what makes this a custom mode at all.
-if [ -s .pi/APPEND_SYSTEM.md ]; then
-  n=$(wc -l < .pi/APPEND_SYSTEM.md)
-  pass "1 mode block: .pi/APPEND_SYSTEM.md, $n lines"
+# 1. The two entry points: the rigorous mode, and the bare skill routes.
+if [ -s .pi/prompts/poteto-mode.md ] && [ -s .pi/extensions/skill-routes.ts ]; then
+  pass "1 entry points: /poteto-mode template, bare skill routes"
 else
-  bad "1 mode block: .pi/APPEND_SYSTEM.md missing or empty"
+  bad "1 entry points: .pi/prompts/poteto-mode.md or .pi/extensions/skill-routes.ts missing"
 fi
 
 # 2. The skill tree, and the router inside it.

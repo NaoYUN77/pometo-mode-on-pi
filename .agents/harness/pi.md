@@ -61,13 +61,17 @@ having.
 Automations, Bugbot, cloud agents, and Cursor's pull request tool have no pi
 equivalent. Say so, skip that step, and continue.
 
-## Why the mode lives in APPEND_SYSTEM.md
+## Why there is no always-on mode block
 
-Cursor's custom mode re-asserts the skill every turn and survives compaction.
-pi has the same primitive: a project `APPEND_SYSTEM.md` enters the system prompt
-on every request. Keep it to the router and the triggers. The 150-line skill body
-stays a file, read when a trigger fires, so the always-on block costs about a
-tenth of what pasting it would.
+Cursor's custom mode re-asserts the skill every turn. pi can do the same with a
+project `APPEND_SYSTEM.md`, and it was tried and removed. An always-on router
+block tells every message, including a one-line question, to match a playbook and
+open a todo list. That is the ceremony pstack's own guide warns against.
+
+The mode is entered instead. `/poteto-mode <task>` loads the router and asks for
+the playbook, and a bare question goes to `/how` or to the answer. The template
+also says to reread the router after a compaction, which is the one thing the
+always-on block bought.
 
 Rebuild nothing after editing it except the session: `/reload` picks up skills and
 prompts, a new session picks up `APPEND_SYSTEM.md`.

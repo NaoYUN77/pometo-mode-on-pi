@@ -5,8 +5,8 @@ rigor, you steer with short follow-ups. This is a port of an existing design, no
 new one; where it differs, the difference is named below.
 
 ```
-.pi/APPEND_SYSTEM.md         the mode block. Enters the system prompt every request.
-.pi/prompts/poteto-mode.md   /poteto-mode <task>
+.pi/prompts/poteto-mode.md   /poteto-mode <task>, the one way into the rigorous mode
+.pi/extensions/skill-routes.ts  bare /how, /arena, /interrogate …
 .pi/agents/                  seven seats, each with a provider/model id
 .pi/extensions/subagent/     the subagent tool, vendored, defaulting to project agents
 .agents/skills/              pstack 0.15.25, vendored
@@ -62,9 +62,16 @@ Faithful, unmodified:
 
 Harness adaptation, because pi has no Cursor primitives:
 
-- `.pi/APPEND_SYSTEM.md` is the custom mode. Cursor re-asserts the whole skill each
-  turn. pi gets a 57-line block holding the router and the triggers, with the skill
-  body read on demand. That is a size compromise, not a design change.
+- The mode is entered, never always-on. Cursor's custom mode can be pinned; here
+  `/poteto-mode <task>` loads the router for that task only. An always-on block was
+  built first and removed: it told every message, including a one-line question, to
+  match a playbook and open a todo list, which is the ceremony pstack's own guide
+  warns against. Measured both ways on one-line questions: with the block, a
+  playbook and a throughput checkpoint; without it, two `bash` calls and a sentence.
+- Bare skill names are restored. pstack's README shows `/how …` and
+  `/interrogate …`; pi registers skills as `/skill:<name>`. `skill-routes.ts`
+  rewrites the input so the short name works, in every mode, rebuilt from
+  `.agents/skills/` on each load.
 - `.pi/agents/` holds seven named seats. pstack has two agents and passes
   `readonly`, `environment` and `model` as call options. pi's subagent tool only
   addresses named agents in `.pi/agents/`, so read-only and per-family variants
@@ -72,6 +79,16 @@ Harness adaptation, because pi has no Cursor primitives:
 - `scripts/doctor.sh` exists because `create-verification-skill` asks a
   verification skill to ship a Doctor step. It answers "is this instance worth
   driving" for the setup itself.
+
+## The two entry points
+
+```
+/how why …          a skill, directly. No playbook, no todo list, no mode.
+/poteto-mode <task> the rigorous mode: router, playbook, verbatim steps in a list
+```
+
+Reach for the second when the work deserves the ceremony, and the first for
+everything else. `/continue` resumes a todo list that already exists.
 
 ## Unattended work
 
