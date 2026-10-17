@@ -185,6 +185,40 @@ const wide = gh.renderIssueTable("o/r", [{ ...issue, title: "y".repeat(200) }]);
 const widest = Math.max(...wide.split("\n").map((line) => line.length));
 check(widest <= 120, "renderIssueTable keeps every line under 120 chars", `widest line is ${widest}`);
 
+// --- the confirmation gate -----------------------------------------------
+//
+// summarize() and WRITES decide what the user is asked before a write runs.
+// They live in format.ts, not index.ts, so this is checkable: index.ts imports
+// typebox, which only resolves inside pi's own loader.
+
+check(typeof gh.summarize === "function", "format.ts exports summarize");
+eq(
+	gh.summarize("gh_issue_claim", { number: 7 }),
+	'Assign #7 to @me?',
+	"summarize defaults the claim assignee to @me",
+);
+eq(
+	gh.summarize("gh_issue_claim", { number: 7, assignee: "nao", branch: "fix/7" }),
+	"Assign #7 to nao and cut branch fix/7?",
+	"summarize names the assignee and branch",
+);
+eq(
+	gh.summarize("gh_pr_create", { title: "T" }),
+	'Open a pull request titled "T"?',
+	"summarize names the PR title",
+);
+eq(
+	gh.summarize("gh_pr_create", { title: "T", base: "main", draft: true }),
+	'Open a pull request into main as a draft titled "T"?',
+	"summarize names the base and the draft flag",
+);
+eq(gh.WRITES, ["gh_issue_claim", "gh_pr_create"], "WRITES lists exactly the two write tools");
+check(!gh.WRITES.includes("gh_issue_list"), "WRITES leaves the read tool out");
+check(
+	gh.summarize("gh_pr_create", { title: "x".repeat(300) }).length < 200,
+	"summarize truncates an absurd title rather than flooding the prompt",
+);
+
 // --- the executing half, driven by a fake gh -----------------------------
 //
 // ops.ts takes an exec function instead of importing pi, so every failure path
@@ -296,6 +330,38 @@ await rejects(
 	);
 	eq(seen[0].body, "line one\nline two", "createPr wrote the body verbatim while gh ran");
 	check(!existsSync(seen[0].bodyPath), "createPr removed the body file afterwards");
+}
+
+// every op forwards the caller's signal, so a cancelled run can stop gh
+{
+	const seen = [];
+	const controller = new AbortController();
+	const exec = async (args, _cwd, signal) => {
+		seen.push(signal);
+		return { stdout: JSON.stringify([]), stderr: "", code: 0 };
+	};
+	await ops.listIssues(exec, { repo: "o/r" }, controller.signal);
+	eq(seen[0], controller.signal, "listIssues forwards the signal to gh");
+}
+{
+	const seen = [];
+	const controller = new AbortController();
+	const exec = async (args, _cwd, signal) => {
+		seen.push(signal);
+		return { stdout: "https://github.com/o/r/pull/7", stderr: "", code: 0 };
+	};
+	await ops.createPr(exec, { title: "T", body: "b" }, controller.signal);
+	eq(seen[0], controller.signal, "createPr forwards the signal to gh");
+}
+{
+	const seen = [];
+	const controller = new AbortController();
+	const exec = async (args, _cwd, signal) => {
+		seen.push(signal);
+		return { stdout: "", stderr: "", code: 0 };
+	};
+	await ops.claimIssue(exec, { number: 1 }, controller.signal);
+	eq(seen[0], controller.signal, "claimIssue forwards the signal to gh");
 }
 
 // pr: losing the number is not worth failing an opened pull request

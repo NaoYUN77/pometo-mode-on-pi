@@ -36,6 +36,40 @@ cp -r <package>/.pi/agents your-project/.pi/agents
 bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 ```
 
+### 项目里已经有同名扩展时
+
+项目如果自己带了 `todo.ts`、`subagent/` 或 gh 工具，注册的工具名跟这个包一样。
+pi 把这当加载期冲突，直接退出，stdout 一个字节都没有：
+
+```
+Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
+```
+
+这里的每个扩展在加载时会先问一句「项目自己有没有这个工具」，有就让位。项目那份赢，
+不需要任何配置。
+
+把注册推迟到 `session_start` 看着像修好了，其实更糟：它会在会话中途重建工具表，
+让所有内建工具拿不到 context，于是 `read` 和 `bash` 全部报
+`Cannot read properties of undefined`。0.1.1 就是这么坏的，不能用。请用 0.1.2 或更新。
+
+### If your project already ships these extensions
+
+A project that vendored `todo.ts`, `subagent/`, or the gh tools registers the same
+tool names this package does. pi treats that as a load-time conflict and exits
+with nothing on stdout:
+
+```
+Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
+```
+
+Each extension here asks, at load, whether the project already owns the name, and
+stands down if it does. Your copy wins. Nothing to configure.
+
+Deferring registration to `session_start` looks like a fix and is not: it rebuilds
+the tool registry mid-session and leaves every built-in tool without its context,
+so `read` and `bash` fail with `Cannot read properties of undefined`. Version
+0.1.1 shipped that and is not usable. Use 0.1.2 or later.
+
 ### What you get
 
 ```
@@ -52,14 +86,15 @@ bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 .agents/harness/pi.md      8K   104 lines: Cursor to pi mapping
 .agents/pstack-models.md   8K   91 lines: role to model table
 .pi/extensions/          104K
-  subagent/index.ts     1036 lines
+  subagent/index.ts     1040 lines
   skill-routes.ts        340 lines
-  todo.ts                297 lines
+  todo.ts                301 lines
   bash-guard.ts          148 lines
-  gh/                    141 + 130 + 178 lines
+  gh/                    177 + 130 + 178 lines
+  lib/project-tools.ts    64 lines
 .pi/agents/               23K   7 seat files, 16 to 28 lines each
 .pi/prompts/               4K   /poteto-mode template
-scripts/                  40K   doctor, check, 3 zero-token test suites
+scripts/                  40K   doctor, check, 4 zero-token test suites
 ```
 
 ### Three layers
@@ -234,11 +269,12 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
 .agents/harness/pi.md      8K   104 行：Cursor 到 pi 的映射
 .agents/pstack-models.md   8K   91 行：角色到模型表
 .pi/extensions/          104K
-  subagent/index.ts     1036 行
+  subagent/index.ts     1040 行
   skill-routes.ts        340 行
-  todo.ts                297 行
+  todo.ts                301 行
   bash-guard.ts          148 行
-  gh/                    141 + 130 + 178 行
+  gh/                    177 + 130 + 178 行
+  lib/project-tools.ts    64 行
 .pi/agents/               23K   7 个档位文件，每个 16 到 28 行
 .pi/prompts/               4K   /poteto-mode 模板
 scripts/                  40K   doctor、check、3 个不花钱的测试
@@ -341,8 +377,8 @@ bash scripts/check.sh
 ```
 
 跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
-输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半。打印 `check: green`
-或 `check: RED`。
+输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半、README 里的每个数字，
+以及工具名冲突。打印 `check: green` 或 `check: RED`。
 
 ### 与 pstack 的差异
 

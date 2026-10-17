@@ -1,3 +1,4 @@
 .runs/
 .arena/
 .DS_Store
+decisions.tsv
