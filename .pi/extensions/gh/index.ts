@@ -1,12 +1,13 @@
 /**
  * GitHub tools: list issues, claim one, open a pull request.
  *
- * Three tools, all thin. Every decision about what `gh` is asked and what the
- * model reads back lives in ./format.ts, which imports nothing and is checked by
- * scripts/verify-gh-tool.mjs without a network or a model call. This file only
- * spawns `gh`, maps exit codes to results, and registers the tools.
+ * This file is only the pi-facing shell: it registers three tools and supplies
+ * the real `gh` exec. Every decision about what `gh` is asked and what the model
+ * reads back lives in ./format.ts and ./ops.ts, which import neither pi nor
+ * typebox and are checked by scripts/verify-gh-tool.mjs with a fake `gh`, no
+ * network, and no model call.
  *
- * Two constraints shaped it:
+ * Two constraints shaped the split:
  *
  *   pi.exec has no stdin. A PR body therefore goes through a temp file and
  *   `--body-file`, never `--body`.
@@ -15,45 +16,22 @@
  *   costs a second `gh pr view --json` call.
  */
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import {
-	buildIssueClaimArgs,
-	buildIssueListArgs,
-	buildPrCreateArgs,
-	parsePrUrl,
-	renderIssueTable,
-	toIssues,
-	type Issue,
-	type RawIssue,
-} from "./format.ts";
+import { WRITES, summarize } from "./format.ts";
+import { claimIssue, createPr, listIssues, type Exec } from "./ops.ts";
+import { registerToolsWhenFree } from "../../lib/defer-tools.ts";
 
 const GH_TIMEOUT = 60_000;
 
-type Exec = (args: string[], cwd: string, signal?: AbortSignal) => Promise<{ stdout: string; stderr: string; code: number }>;
-
-/** One place where a non-zero exit becomes a message the model can act on. */
-async function gh(exec: Exec, args: string[], what: string) {
-	const result = await exec(args, "", undefined);
-	if (result.code !== 0) {
-		const detail = result.stderr.trim() || `exit ${result.code}`;
-		throw new Error(`${what} failed: ${detail}`);
-	}
-	return result.stdout;
-}
-
 export default function (pi: ExtensionAPI) {
-	const run: Exec = async (args, cwd, signal) => {
+	/** The real exec. cwd defaults to the session's, so `gh` sees the right repo. */
+	const exec: Exec = async (args, cwd, signal) => {
 		const result = await pi.exec("gh", args, { cwd: cwd || undefined, signal, timeout: GH_TIMEOUT });
 		return { stdout: result.stdout, stderr: result.stderr, code: result.code };
 	};
 
-	// --- read ------------------------------------------------------------
-
-	pi.registerTool({
+	registerToolsWhenFree(pi, [{
 		name: "gh_issue_list",
 		label: "List GitHub issues",
 		description:
@@ -62,7 +40,9 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet: "List GitHub issues as a table",
 		annotations: { readOnlyHint: true, openWorldHint: true },
 		parameters: Type.Object({
-			repo: Type.Optional(Type.String({ description: "owner/name. Defaults to the repo of the working directory" })),
+			repo: Type.Optional(
+				Type.String({ description: "owner/name. Defaults to the repo of the working directory" }),
+			),
 			limit: Type.Optional(Type.Number({ description: "How many issues. Default 30" })),
 			state: Type.Optional(
 				Type.Union([Type.Literal("open"), Type.Literal("closed"), Type.Literal("all")], {
@@ -74,19 +54,15 @@ export default function (pi: ExtensionAPI) {
 		}),
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const args = buildIssueListArgs(params);
-			const stdout = await gh((a, _c, s) => run(a, ctx.cwd, s), args, "gh issue list");
-			const issues = toIssues(JSON.parse(stdout) as RawIssue[]);
+			const result = await listIssues(exec, { ...params, cwd: ctx.cwd }, signal);
 			return {
-				content: [{ type: "text", text: renderIssueTable(params.repo ?? "this repo", issues) }],
-				details: { issues, repo: params.repo ?? null },
+				content: [{ type: "text", text: result.text }],
+				details: { issues: result.issues, repo: params.repo ?? null },
 			};
 		},
-	});
+	},
 
-	// --- write -----------------------------------------------------------
-
-	pi.registerTool({
+	{
 		name: "gh_issue_claim",
 		label: "Claim a GitHub issue",
 		description:
@@ -97,27 +73,27 @@ export default function (pi: ExtensionAPI) {
 		parameters: Type.Object({
 			number: Type.Number({ description: "Issue number" }),
 			assignee: Type.Optional(Type.String({ description: 'Login. Default "@me"' })),
-			branch: Type.Optional(Type.String({ description: "Create and check out a linked branch with this name" })),
+			branch: Type.Optional(
+				Type.String({ description: "Create and check out a linked branch with this name" }),
+			),
 			base: Type.Optional(Type.String({ description: "Branch the new branch starts from" })),
 		}),
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const commands = buildIssueClaimArgs(params);
-			const done: string[] = [];
-			for (const args of commands) {
-				await gh((a, _c, s) => run(a, ctx.cwd, s), args, `gh ${args.slice(0, 2).join(" ")}`);
-				done.push(args.slice(0, 2).join(" "));
-			}
-			const assignee = params.assignee ?? "@me";
-			const branch = params.branch ? `, branch ${params.branch}` : "";
+			const result = await claimIssue(exec, { ...params, cwd: ctx.cwd }, signal);
 			return {
-				content: [{ type: "text", text: `Claimed #${params.number} as ${assignee}${branch}.` }],
-				details: { number: params.number, assignee, branch: params.branch ?? null, ran: done },
+				content: [{ type: "text", text: result.text }],
+				details: {
+					number: params.number,
+					assignee: params.assignee ?? "@me",
+					branch: params.branch ?? null,
+					ran: result.ran,
+				},
 			};
 		},
-	});
+	},
 
-	pi.registerTool({
+	{
 		name: "gh_pr_create",
 		label: "Open a pull request",
 		description:
@@ -135,38 +111,32 @@ export default function (pi: ExtensionAPI) {
 		}),
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const dir = await mkdtemp(join(tmpdir(), "pi-gh-pr-"));
-			const bodyPath = join(dir, "body.md");
-			try {
-				await writeFile(bodyPath, params.body, "utf8");
-				const args = buildPrCreateArgs({ ...params, bodyPath });
-				const stdout = await gh((a, _c, s) => run(a, ctx.cwd, s), args, "gh pr create");
-
-				const url = parsePrUrl(stdout);
-				if (!url) {
-					throw new Error(`gh pr create printed no pull URL: ${stdout.trim().slice(0, 200)}`);
-				}
-
-				let number: number | null = null;
-				try {
-					const viewed = await gh(
-						(a, _c, s) => run(a, ctx.cwd, s),
-						["pr", "view", url, "--json", "number"],
-						"gh pr view",
-					);
-					number = (JSON.parse(viewed) as { number: number }).number;
-				} catch {
-					// The PR exists. Losing its number is not worth failing the call.
-				}
-
-				const label = number ? `PR #${number}` : "PR";
-				return {
-					content: [{ type: "text", text: `Opened ${label}: ${url}` }],
-					details: { number, url, draft: params.draft ?? false },
-				};
-			} finally {
-				await rm(dir, { recursive: true, force: true });
-			}
+			const result = await createPr(exec, { ...params, cwd: ctx.cwd }, signal);
+			const label = result.number ? `PR #${result.number}` : "PR";
+			return {
+				content: [{ type: "text", text: `Opened ${label}: ${result.url}` }],
+				details: result,
+			};
 		},
+	}]);
+
+	/**
+	 * A write to GitHub asks first. In a mode with no UI there is nobody to ask,
+	 * so the call is blocked rather than silently allowed — the fail-safe that
+	 * pi's own tool_call contract asks for.
+	 */
+	pi.on("tool_call", async (event, ctx) => {
+		if (!WRITES.includes(event.toolName)) return undefined;
+
+		const question = summarize(event.toolName, event.input);
+		if (!ctx.hasUI) {
+			return { block: true, reason: `${event.toolName} needs confirmation, and this mode has no UI: ${question}` };
+		}
+
+		const allowed = await ctx.ui.confirm("GitHub", question);
+		if (!allowed) {
+			return { block: true, reason: `Declined: ${question}` };
+		}
+		return undefined;
 	});
 }

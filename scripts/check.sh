@@ -47,6 +47,16 @@ if [ -f scripts/verify-readme.mjs ]; then
   fi
 fi
 
+# A package that ships a tool name the project already has must not kill the
+# session. This is the guard for that, and it costs no tokens.
+if [ -f scripts/test-tool-conflicts.mjs ]; then
+  echo
+  echo "--- tool conflicts ---"
+  if ! node scripts/test-tool-conflicts.mjs; then
+    rc=1
+  fi
+fi
+
 # Every page or module that carries its own verification script.
 found=0
 while IFS= read -r script; do

@@ -36,6 +36,21 @@ cp -r <package>/.pi/agents your-project/.pi/agents
 bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 ```
 
+### If your project already ships these extensions
+
+A project that vendored `todo.ts`, `subagent/`, or the gh tools registers the same
+tool names this package does. pi treats that as a load-time conflict and refuses
+to start the session:
+
+```
+Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
+```
+
+Version 0.1.0 of this package had that bug and could not start such a project at
+all. From 0.1.1 the tools register on `session_start`, after pi's one-shot
+conflict check has run, and any name the session already has is skipped. The
+project's own copy wins. Nothing to configure.
+
 ### What you get
 
 ```
@@ -52,14 +67,15 @@ bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 .agents/harness/pi.md      8K   104 lines: Cursor to pi mapping
 .agents/pstack-models.md   8K   91 lines: role to model table
 .pi/extensions/          104K
-  subagent/index.ts     1036 lines
+  subagent/index.ts     1037 lines
   skill-routes.ts        340 lines
-  todo.ts                297 lines
+  todo.ts                299 lines
   bash-guard.ts          148 lines
-  gh/                    141 + 130 + 178 lines
+  gh/                    142 + 130 + 178 lines
+  lib/defer-tools.ts      46 lines
 .pi/agents/               23K   7 seat files, 16 to 28 lines each
 .pi/prompts/               4K   /poteto-mode template
-scripts/                  40K   doctor, check, 3 zero-token test suites
+scripts/                  40K   doctor, check, 4 zero-token test suites
 ```
 
 ### Three layers
@@ -234,11 +250,12 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
 .agents/harness/pi.md      8K   104 行：Cursor 到 pi 的映射
 .agents/pstack-models.md   8K   91 行：角色到模型表
 .pi/extensions/          104K
-  subagent/index.ts     1036 行
+  subagent/index.ts     1037 行
   skill-routes.ts        340 行
-  todo.ts                297 行
+  todo.ts                299 行
   bash-guard.ts          148 行
-  gh/                    141 + 130 + 178 行
+  gh/                    142 + 130 + 178 行
+  lib/defer-tools.ts      46 行
 .pi/agents/               23K   7 个档位文件，每个 16 到 28 行
 .pi/prompts/               4K   /poteto-mode 模板
 scripts/                  40K   doctor、check、3 个不花钱的测试
@@ -341,8 +358,8 @@ bash scripts/check.sh
 ```
 
 跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
-输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半。打印 `check: green`
-或 `check: RED`。
+输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半、README 里的每个数字，
+以及工具名冲突。打印 `check: green` 或 `check: RED`。
 
 ### 与 pstack 的差异
 
