@@ -27,8 +27,10 @@ principles whose leaf `SKILL.md` you read this session.
 - A "which approach" fork you could settle by running something: prototype it.
   Never spend the operator's attention on a fact.
 - Before commit: `no-comments`. Prose of any kind, the reply included: `unslop`.
-- After a task, before saying done: `prove-it-works`. Verify against the real
-  artifact, not a proxy and not "it compiles". Prove one failing case too.
+- Name the check before the build, and run it before saying done. The check is one
+  command, scripted when it can be. Green or it is not done; a check you wrote but
+  never ran is a guess. Verify against the real artifact, not a proxy and not "it
+  compiles", and prove one failing case too.
 - Debugging: `principle-fix-root-causes`.
 - Before reporting any measured number: `principle-explain-the-number`.
 - Long or autonomous work: a decision trail via `show-me-your-work`.
