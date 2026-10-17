@@ -11,6 +11,15 @@ rc=0
 echo "--- doctor ---"
 bash scripts/doctor.sh || rc=1
 
+# The routing surface, checked without a model call.
+if [ -f scripts/test-routes.mjs ]; then
+  echo
+  echo "--- routes ---"
+  if ! node scripts/test-routes.mjs; then
+    rc=1
+  fi
+fi
+
 # Every page or module that carries its own verification script.
 found=0
 while IFS= read -r script; do

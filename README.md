@@ -110,8 +110,9 @@ first thing to fall through, which is what a wrapper script cannot fix.
 ## Check it before trusting it
 
 ```bash
-bash scripts/doctor.sh     # mode block, skills, seat models, read-only seats, wiring
-bash scripts/check.sh      # doctor, then every verify.mjs, prints check: green or RED
+bash scripts/doctor.sh        # entry points, skills, seat models, read-only seats, wiring
+node scripts/test-routes.mjs # the routing surface, no model calls
+bash scripts/check.sh         # doctor, route tests, then every verify.mjs
 ```
 
 Green covers arithmetic, structure, links and numbers. It does not cover how a
