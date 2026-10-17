@@ -12,7 +12,7 @@ bad()  { printf 'FAIL %s\n' "$1"; fail=$((fail + 1)); }
 
 # 1. The two entry points: the rigorous mode, and the bare skill routes.
 if [ -s .pi/prompts/poteto-mode.md ] && [ -s .pi/extensions/skill-routes.ts ]; then
-  pass "1 entry points: /poteto-mode template, bare skill routes"
+  pass "1 entry points: /poteto-mode template, bare skill and playbook routes"
 else
   bad "1 entry points: .pi/prompts/poteto-mode.md or .pi/extensions/skill-routes.ts missing"
 fi
