@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KV cache 与长上下文的显存账</title>
+<meta name="description" content="从公式到带宽上限，算清 LLM 推理时 KV cache 占多少显存，以及三种旋钮各自拧的是哪个因子。">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="rail" id="rail" data-mla="false">
+  <div class="rail-inner">
+    <ol class="rail-factors">
+      <li class="factor" data-factor="pair"><span class="factor-name">2</span><span class="factor-value">K 和 V</span></li>
+      <li class="factor-op" aria-hidden="true">×</li>
+      <li class="factor" data-factor="layers"><span class="factor-name">layers</span><span class="factor-value" data-live="layers">32</span></li>
+      <li class="factor-op" aria-hidden="true">×</li>
+      <li class="factor" data-factor="heads"><span class="factor-name">kv_heads</span><span class="factor-value" data-live="kvHeads">32</span></li>
+      <li class="factor-op op-mla-hide" aria-hidden="true">×</li>
+      <li class="factor" data-factor="heads"><span class="factor-name">head_dim</span><span class="factor-value" data-live="headDim">128</span></li>
+      <li class="factor-op op-mla-hide" aria-hidden="true">×</li>
+      <li class="factor factor-latent"><span class="factor-name">→ latent</span><span class="factor-value">576</span></li>
+      <li class="factor-op op-latent-show" aria-hidden="true">×</li>
+      <li class="factor" data-factor="tokens"><span class="factor-name">tokens</span><span class="factor-value" data-live="tokens">8,192</span></li>
+      <li class="factor-op" aria-hidden="true">×</li>
+      <li class="factor" data-factor="bytes"><span class="factor-name">bytes</span><span class="factor-value">2</span></li>
+    </ol>
+    <p class="rail-product"><span class="rail-product-sign" aria-hidden="true">=</span><span class="rail-product-value" data-live="product">4.00 GiB</span></p>
+    <p class="rail-note">不改因子，只消除浪费</p>
+  </div>
+  <p class="rail-compact">tokens <span data-live="compact-tokens">8,192</span> · 缓存 <span data-live="compact-cache">4.00 GiB</span></p>
+</header>
+
+<main class="wrap">
+  <header class="hero" id="top">
+    <p class="eyebrow">LLM 推理 · 显存</p>
+    <h1>长上下文吃掉的显存，多半是 KV cache</h1>
+    <p class="lede">一次 <code>decode</code> 只出一个 token，但每一步都要读前面所有 token 的 K 和 V。把它们留在显存里，是用空间换算力。这笔账可以拆成六个因子，逐个拧。</p>
+    <p class="hero-jump"><a href="#interaction">跳到交互面板</a></p>
+  </header>
+
+  <section class="section" id="decode" data-factor="tokens">
+    <h2>一次 decode 只出一个 token</h2>
+    <p><code>prefill</code> 一次过完整段 prompt，<code>decode</code> 一次只追加一个 token。显存的压力从第一个 token 起就开始累积。</p>
+    <p>第 t 个 token 的注意力要看前面每个 token 的 K 和 V。权重不变，那些 K 和 V 就不会变，可以留着。</p>
+    <p>不缓存就得每步重算。8 个 token 的序列，重算要算 36 次 K/V，留着只算 8 次。</p>
+    <p>交易的另一头是显存。缓存随 tokens 线性增长，重算的成本随序列长度的平方增长，<code>O(n²)</code>。</p>
+    <figure class="fig-wrap"><svg class="fig fig-recompute" viewBox="0 0 460 284" role="img" aria-labelledby="f1-t" width="100%" height="auto"><title id="f1-t">逐步重算与留缓存的计算次数</title><desc>左侧把每一步都重算一遍，8 个 token 填满 36 个格；右侧只算新的一行，留下 28 个格已经驻留。</desc><text class="t-strong" x="20" y="30">不缓存：每步重算</text><text class="t-label" x="20" y="48">每步把前面的 K/V 再算一遍</text><text class="t-strong" x="240" y="30">留缓存：每步只算一行</text><text class="t-label" x="240" y="48">前面的 K 和 V 已经躺在显存里</text><g shape-rendering="crispEdges"><rect class="a-k" x="20" y="70" width="14" height="14"/><rect class="a-k" x="20" y="86" width="14" height="14"/><rect class="a-k" x="36" y="86" width="14" height="14"/><rect class="a-k" x="20" y="102" width="14" height="14"/><rect class="a-k" x="36" y="102" width="14" height="14"/><rect class="a-k" x="52" y="102" width="14" height="14"/><rect class="a-k" x="20" y="118" width="14" height="14"/><rect class="a-k" x="36" y="118" width="14" height="14"/><rect class="a-k" x="52" y="118" width="14" height="14"/><rect class="a-k" x="68" y="118" width="14" height="14"/><rect class="a-k" x="20" y="134" width="14" height="14"/><rect class="a-k" x="36" y="134" width="14" height="14"/><rect class="a-k" x="52" y="134" width="14" height="14"/><rect class="a-k" x="68" y="134" width="14" height="14"/><rect class="a-k" x="84" y="134" width="14" height="14"/><rect class="a-k" x="20" y="150" width="14" height="14"/><rect class="a-k" x="36" y="150" width="14" height="14"/><rect class="a-k" x="52" y="150" width="14" height="14"/><rect class="a-k" x="68" y="150" width="14" height="14"/><rect class="a-k" x="84" y="150" width="14" height="14"/><rect class="a-k" x="100" y="150" width="14" height="14"/><rect class="a-k" x="20" y="166" width="14" height="14"/><rect class="a-k" x="36" y="166" width="14" height="14"/><rect class="a-k" x="52" y="166" width="14" height="14"/><rect class="a-k" x="68" y="166" width="14" height="14"/><rect class="a-k" x="84" y="166" width="14" height="14"/><rect class="a-k" x="100" y="166" width="14" height="14"/><rect class="a-k" x="116" y="166" width="14" height="14"/><rect class="a-k" x="20" y="182" width="14" height="14"/><rect class="a-k" x="36" y="182" width="14" height="14"/><rect class="a-k" x="52" y="182" width="14" height="14"/><rect class="a-k" x="68" y="182" width="14" height="14"/><rect class="a-k" x="84" y="182" width="14" height="14"/><rect class="a-k" x="100" y="182" width="14" height="14"/><rect class="a-k" x="116" y="182" width="14" height="14"/><rect class="a-k" x="132" y="182" width="14" height="14"/><rect class="a-k" x="240" y="70" width="14" height="14"/><rect class="a-hollow" x="256" y="70" width="14" height="14"/><rect class="a-hollow" x="272" y="70" width="14" height="14"/><rect class="a-hollow" x="288" y="70" width="14" height="14"/><rect class="a-hollow" x="304" y="70" width="14" height="14"/><rect class="a-hollow" x="320" y="70" width="14" height="14"/><rect class="a-hollow" x="336" y="70" width="14" height="14"/><rect class="a-hollow" x="352" y="70" width="14" height="14"/><rect class="a-k" x="256" y="86" width="14" height="14"/><rect class="a-hollow" x="272" y="86" width="14" height="14"/><rect class="a-hollow" x="288" y="86" width="14" height="14"/><rect class="a-hollow" x="304" y="86" width="14" height="14"/><rect class="a-hollow" x="320" y="86" width="14" height="14"/><rect class="a-hollow" x="336" y="86" width="14" height="14"/><rect class="a-hollow" x="352" y="86" width="14" height="14"/><rect class="a-k" x="272" y="102" width="14" height="14"/><rect class="a-hollow" x="288" y="102" width="14" height="14"/><rect class="a-hollow" x="304" y="102" width="14" height="14"/><rect class="a-hollow" x="320" y="102" width="14" height="14"/><rect class="a-hollow" x="336" y="102" width="14" height="14"/><rect class="a-hollow" x="352" y="102" width="14" height="14"/><rect class="a-k" x="288" y="118" width="14" height="14"/><rect class="a-hollow" x="304" y="118" width="14" height="14"/><rect class="a-hollow" x="320" y="118" width="14" height="14"/><rect class="a-hollow" x="336" y="118" width="14" height="14"/><rect class="a-hollow" x="352" y="118" width="14" height="14"/><rect class="a-k" x="304" y="134" width="14" height="14"/><rect class="a-hollow" x="320" y="134" width="14" height="14"/><rect class="a-hollow" x="336" y="134" width="14" height="14"/><rect class="a-hollow" x="352" y="134" width="14" height="14"/><rect class="a-k" x="320" y="150" width="14" height="14"/><rect class="a-hollow" x="336" y="150" width="14" height="14"/><rect class="a-hollow" x="352" y="150" width="14" height="14"/><rect class="a-k" x="336" y="166" width="14" height="14"/><rect class="a-hollow" x="352" y="166" width="14" height="14"/><rect class="a-k" x="352" y="182" width="14" height="14"/></g><text class="t-num" x="20" y="216">Σ = 36 次 K/V 计算</text><text class="t-num" x="240" y="216">8 次 K/V 计算，28 格已驻留</text><text class="t-label" x="20" y="238">8 个 token，8×9/2 = 36</text><text class="t-label" x="240" y="238">每个格是一次 K/V 计算</text><rect class="a-k" x="20" y="256" width="12" height="12"/><text class="t-label" x="38" y="266">这次要算</text><rect class="a-hollow" x="120" y="256" width="12" height="12"/><text class="t-label" x="138" y="266">已驻留，不重算</text></svg><figcaption>两种机制的计算次数。数字来自机制本身，不是实测。</figcaption></figure>
+  </section>
+
+  <section class="section" id="kv" data-factor="pair">
+    <h2>缓存里存的是 K 和 V</h2>
+    <p>常驻显存的只有 K 和 V，每层各一份。</p>
+    <p>每层一份表的形状是 <code>[batch, kv_heads, tokens, head_dim]</code>。K 一张，V 一张。</p>
+    <p>公式开头的 2 就是这两张表。它不是两次前向，也不是把 K 存了两遍。</p>
+    <p><code>q_t</code>、注意力分数、softmax 之后的权重都不驻留，算完即弃。</p>
+  </section>
+
+  <section class="section" id="step" data-factor="tokens">
+    <h2>一个 decode step 的读账</h2>
+    <p>新的 <code>q_t</code> 进来，它和缓存里每个 <code>k</code> 做点积，得到 t 个分数。</p>
+    <p>softmax 把分数变成 t 个权重，权重再加权混合每一个缓存的 <code>v</code>，得到这一层的 <code>o_t</code>。</p>
+    <p>读的是整张表，写的只有一行。表每步长一行，读量也每步涨一行。</p>
+    <p>32 层各做一遍同样的事。读账里权重是常数，表不是。</p>
+    <figure class="fig-wrap"><svg class="fig fig-step" viewBox="0 0 460 424" role="img" aria-labelledby="f2-t" width="100%" height="auto"><title id="f2-t">一个 decode step 读完整张表</title><desc>左侧是 q_t，中间是缓存的 K 表、12 个点积分数与 12 个 softmax 权重，右侧是缓存的 V 表与输出 o_t；K 表第 12 行是最新写入的一行。</desc><defs><pattern id="f2-h" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="p-tint" width="6" height="6"/><path class="p-line" d="M0 6 L6 0"/></pattern></defs><text class="t-strong" x="10" y="80">q_t</text><text class="t-strong" x="56" y="80">缓存的 K</text><text class="t-strong" x="152" y="80">点积</text><text class="t-strong" x="214" y="80">权重</text><text class="t-strong" x="276" y="80">缓存的 V</text><text class="t-strong" x="364" y="80">o_t</text><g shape-rendering="crispEdges"><rect class="a-band" x="152" y="106" width="200" height="17"/><rect class="a-band" x="152" y="138" width="200" height="17"/><rect class="a-band" x="152" y="170" width="200" height="17"/><rect class="a-band" x="152" y="202" width="200" height="17"/><rect class="a-band" x="152" y="234" width="200" height="17"/><rect class="a-band" x="152" y="266" width="200" height="17"/></g><rect class="a-neutral" x="10" y="92" width="32" height="188"/><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="92" width="76" height="13"/><rect class="a-k" x="56" y="108" width="76" height="13"/><rect class="a-k" x="56" y="124" width="76" height="13"/><rect class="a-k" x="56" y="140" width="76" height="13"/><rect class="a-k" x="56" y="156" width="76" height="13"/><rect class="a-k" x="56" y="172" width="76" height="13"/><rect class="a-k" x="56" y="188" width="76" height="13"/><rect class="a-k" x="56" y="204" width="76" height="13"/><rect class="a-k" x="56" y="220" width="76" height="13"/><rect class="a-k" x="56" y="236" width="76" height="13"/><rect class="a-k" x="56" y="252" width="76" height="13"/><rect class="a-k" x="56" y="268" width="76" height="13"/></g><g shape-rendering="crispEdges"><rect class="a-score" x="152" y="92" width="46" height="13"/><rect class="a-score" x="152" y="108" width="42" height="13"/><rect class="a-score" x="152" y="124" width="39" height="13"/><rect class="a-score" x="152" y="140" width="35" height="13"/><rect class="a-score" x="152" y="156" width="32" height="13"/><rect class="a-score" x="152" y="172" width="28" height="13"/><rect class="a-score" x="152" y="188" width="25" height="13"/><rect class="a-score" x="152" y="204" width="21" height="13"/><rect class="a-score" x="152" y="220" width="18" height="13"/><rect class="a-score" x="152" y="236" width="15" height="13"/><rect class="a-score" x="152" y="252" width="12" height="13"/><rect class="a-score" x="152" y="268" width="9" height="13"/></g><g shape-rendering="crispEdges"><rect class="a-v" fill="url(#f2-h)" x="214" y="92" width="46" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="108" width="32" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="124" width="22" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="140" width="16" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="156" width="12" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="172" width="9" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="188" width="7" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="204" width="6" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="220" width="5" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="236" width="4" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="252" width="3" height="13"/><rect class="a-v" fill="url(#f2-h)" x="214" y="268" width="3" height="13"/></g><g shape-rendering="crispEdges"><rect class="a-v" fill="url(#f2-h)" x="276" y="92" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="108" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="124" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="140" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="156" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="172" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="188" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="204" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="220" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="236" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="252" width="76" height="13"/><rect class="a-v" fill="url(#f2-h)" x="276" y="268" width="76" height="13"/></g><rect class="a-neutral" x="364" y="92" width="32" height="188"/><g class="f2-fresh"><rect class="a-outline" x="54" y="266" width="80" height="17"/></g><text class="t-label" x="137" y="278">新</text><path class="a-rule" d="M56 300 H352 M56 294 V306 M352 294 V306"/><text class="t-num" x="204" y="320" text-anchor="middle">[1, 8, 12, 128]</text><text class="t-label" x="204" y="338" text-anchor="middle">每层一份 · 32 层</text><rect class="a-callout" x="10" y="354" width="440" height="58" rx="8"/><text class="t-strong" x="230" y="378" text-anchor="middle">这一步读完了整张表。</text><text class="t-label" x="230" y="396" text-anchor="middle">权重没变，表长了一行。</text></svg><figcaption>一层 decode 的读写。K 表第 12 行是刚写入的那一行，分数与权重是示意。</figcaption></figure>
+  </section>
+
+  <section class="section" id="formula" data-factor="all">
+    <h2>六个数乘出你的显存</h2>
+    <p>把上面三步写成一行，就是这条公式。</p>
+    <p class="formula">2 × layers × kv_heads × head_dim × tokens × bytes_per_element</p>
+    <table class="factor-table">
+      <caption>六个因子与它们的单位</caption>
+      <thead>
+        <tr><th scope="col">因子</th><th scope="col">单位</th><th scope="col">它是什么</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">2</th><td data-label="单位">张表</td><td data-label="它是什么">K 一张，V 一张，不是两次前向</td></tr>
+        <tr><th scope="row">layers</th><td data-label="单位">层</td><td data-label="它是什么">每层各有一份缓存</td></tr>
+        <tr><th scope="row">kv_heads</th><td data-label="单位">head</td><td data-label="它是什么">只数 KV head，query head 不进来</td></tr>
+        <tr><th scope="row">head_dim</th><td data-label="单位">维</td><td data-label="它是什么">每个 KV head 的宽度，元素大小由精度定</td></tr>
+        <tr><th scope="row">tokens</th><td data-label="单位">token</td><td data-label="它是什么">上下文里已有的 token 数</td></tr>
+        <tr><th scope="row">bytes_per_element</th><td data-label="单位">字节</td><td data-label="它是什么">fp16 记 2 字节，量化后更小</td></tr>
+      </tbody>
+    </table>
+    <p>代入 Llama-2-7B 与 8,192 个 token：2 × 32 × 32 × 128 × 8,192 × 2 字节 = 4.00 GiB。</p>
+    <p>模型给定 layers、kv_heads、head_dim，上下文给定 tokens，精度给定 bytes_per_element。开头的 2 由 K 和 V 给定，不由你决定。</p>
+    <p>后面每一节只做一件事，指出一种手段拧的是哪个因子。</p>
+  </section>
+
+  <section class="section" id="weight" data-factor="tokens">
+    <h2>512 KiB 有多重</h2>
+    <p>Llama-2-7B 每 token 512 KiB，也就是 16 个格。</p>
+    <figure class="fig-wrap"><svg class="fig fig-token" viewBox="0 0 520 172" role="img" aria-labelledby="f4-t" width="100%" height="auto"><title id="f4-t">每 token 成本，一格 32 KiB</title><desc>六种模型每 token 的缓存体积画成格子，一格 32 KiB；从 16 格到 67.5 KiB 的两格多一点。</desc><text class="t-strong" x="12" y="22">MHA</text><text class="t-label" x="12" y="40">32 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="12" y="68" width="14" height="14"/><rect class="a-k" x="28" y="68" width="14" height="14"/><rect class="a-k" x="44" y="68" width="14" height="14"/><rect class="a-k" x="60" y="68" width="14" height="14"/><rect class="a-k" x="12" y="84" width="14" height="14"/><rect class="a-k" x="28" y="84" width="14" height="14"/><rect class="a-k" x="44" y="84" width="14" height="14"/><rect class="a-k" x="60" y="84" width="14" height="14"/><rect class="a-k" x="12" y="100" width="14" height="14"/><rect class="a-k" x="28" y="100" width="14" height="14"/><rect class="a-k" x="44" y="100" width="14" height="14"/><rect class="a-k" x="60" y="100" width="14" height="14"/><rect class="a-k" x="12" y="116" width="14" height="14"/><rect class="a-k" x="28" y="116" width="14" height="14"/><rect class="a-k" x="44" y="116" width="14" height="14"/><rect class="a-k" x="60" y="116" width="14" height="14"/></g><text class="t-num" x="12" y="150">512 KiB</text><text class="t-strong" x="96" y="22">MHA</text><text class="t-label" x="96" y="40">40 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="96" y="52" width="14" height="14"/><rect class="a-k" x="112" y="52" width="14" height="14"/><rect class="a-k" x="128" y="52" width="14" height="14"/><rect class="a-k" x="144" y="52" width="14" height="14"/><rect class="a-k" x="160" y="52" width="14" height="14"/><rect class="a-k" x="96" y="68" width="14" height="14"/><rect class="a-k" x="112" y="68" width="14" height="14"/><rect class="a-k" x="128" y="68" width="14" height="14"/><rect class="a-k" x="144" y="68" width="14" height="14"/><rect class="a-k" x="160" y="68" width="14" height="14"/><rect class="a-k" x="96" y="84" width="14" height="14"/><rect class="a-k" x="112" y="84" width="14" height="14"/><rect class="a-k" x="128" y="84" width="14" height="14"/><rect class="a-k" x="144" y="84" width="14" height="14"/><rect class="a-k" x="160" y="84" width="14" height="14"/><rect class="a-k" x="96" y="100" width="14" height="14"/><rect class="a-k" x="112" y="100" width="14" height="14"/><rect class="a-k" x="128" y="100" width="14" height="14"/><rect class="a-k" x="144" y="100" width="14" height="14"/><rect class="a-k" x="160" y="100" width="14" height="14"/><rect class="a-k" x="96" y="116" width="14" height="14"/><rect class="a-k" x="112" y="116" width="14" height="14"/><rect class="a-k" x="128" y="116" width="14" height="14"/><rect class="a-k" x="144" y="116" width="14" height="14"/><rect class="a-k" x="160" y="116" width="14" height="14"/></g><text class="t-num" x="96" y="150">800 KiB</text><text class="t-strong" x="180" y="22">GQA</text><text class="t-label" x="180" y="40">32 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="180" y="100" width="14" height="14"/><rect class="a-k" x="196" y="100" width="14" height="14"/><rect class="a-k" x="180" y="116" width="14" height="14"/><rect class="a-k" x="196" y="116" width="14" height="14"/></g><text class="t-num" x="180" y="150">128 KiB</text><text class="t-strong" x="264" y="22">GQA</text><text class="t-label" x="264" y="40">32 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="264" y="100" width="14" height="14"/><rect class="a-k" x="280" y="100" width="14" height="14"/><rect class="a-k" x="264" y="116" width="14" height="14"/><rect class="a-k" x="280" y="116" width="14" height="14"/></g><text class="t-num" x="264" y="150">128 KiB</text><text class="t-strong" x="348" y="22">GQA</text><text class="t-label" x="348" y="40">80 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="348" y="100" width="14" height="14"/><rect class="a-k" x="364" y="100" width="14" height="14"/><rect class="a-k" x="380" y="100" width="14" height="14"/><rect class="a-k" x="396" y="100" width="14" height="14"/><rect class="a-k" x="412" y="100" width="14" height="14"/><rect class="a-k" x="348" y="116" width="14" height="14"/><rect class="a-k" x="364" y="116" width="14" height="14"/><rect class="a-k" x="380" y="116" width="14" height="14"/><rect class="a-k" x="396" y="116" width="14" height="14"/><rect class="a-k" x="412" y="116" width="14" height="14"/></g><text class="t-num" x="348" y="150">320 KiB</text><text class="t-strong" x="432" y="22">MLA</text><text class="t-label" x="432" y="40">60 层</text><g shape-rendering="crispEdges"><rect class="a-k" x="432" y="116" width="14" height="14"/><rect class="a-k" x="448" y="116" width="14" height="14"/><rect class="a-k" x="464" y="116" width="2" height="14"/></g><text class="t-num" x="432" y="150">67.5 KiB</text></svg><figcaption>一格 32 KiB，K 与 V 合计。Llama-2-7B 的 512 KiB 是 16 格，DeepSeek-V2 的 67.5 KiB 只有 2.125 格。</figcaption></figure>
+    <p>把 tokens 拉长，缓存按比例长。</p>
+    <table class="model-table">
+      <caption>六种模型在三种上下文长度下的 KV cache</caption>
+      <thead>
+        <tr><th scope="col">模型</th><th scope="col" class="num">每 token</th><th scope="col" class="num">4k</th><th scope="col" class="num">8k</th><th scope="col" class="num">32k</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row" data-model="llama2-7b">Llama-2 · MHA · 32 层</th>
+          <td data-label="每 token" class="num">512 KiB</td>
+          <td data-label="4k" class="num">2.00 GiB</td>
+          <td data-label="8k" class="num">4.00 GiB</td>
+          <td data-label="32k" class="num">16.00 GiB</td>
+        </tr>
+        <tr>
+          <th scope="row" data-model="llama2-13b">Llama-2 · MHA · 40 层</th>
+          <td data-label="每 token" class="num">800 KiB</td>
+          <td data-label="4k" class="num">3.13 GiB</td>
+          <td data-label="8k" class="num">6.25 GiB</td>
+          <td data-label="32k" class="num">25.00 GiB</td>
+        </tr>
+        <tr>
+          <th scope="row" data-model="llama3-8b">Llama-3 · GQA · 32 层</th>
+          <td data-label="每 token" class="num">128 KiB</td>
+          <td data-label="4k" class="num">512 MiB</td>
+          <td data-label="8k" class="num">1.00 GiB</td>
+          <td data-label="32k" class="num">4.00 GiB</td>
+        </tr>
+        <tr>
+          <th scope="row" data-model="mistral-7b">Mistral · GQA · 32 层</th>
+          <td data-label="每 token" class="num">128 KiB</td>
+          <td data-label="4k" class="num">512 MiB</td>
+          <td data-label="8k" class="num">1.00 GiB</td>
+          <td data-label="32k" class="num">4.00 GiB</td>
+        </tr>
+        <tr>
+          <th scope="row" data-model="llama3-70b">Llama-3 · GQA · 80 层</th>
+          <td data-label="每 token" class="num">320 KiB</td>
+          <td data-label="4k" class="num">1.25 GiB</td>
+          <td data-label="8k" class="num">2.50 GiB</td>
+          <td data-label="32k" class="num">10.00 GiB</td>
+        </tr>
+        <tr>
+          <th scope="row" data-model="deepseek-v2">DeepSeek-V2 · MLA · 60 层</th>
+          <td data-label="每 token" class="num">67.5 KiB</td>
+          <td data-label="4k" class="num">270 MiB</td>
+          <td data-label="8k" class="num">540 MiB</td>
+          <td data-label="32k" class="num">2.16 GiB</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>表里最容易被忽略的是会话数。两个 8k 会话在 Llama-2-7B 上是 8.00 GiB，权重一个字节还没算。</p>
+    <p>缓存跟着同时打开的会话走，不跟着模型走。同样 32k 上下文，GQA 的 4.00 GiB 与 MHA 的 16.00 GiB 差 4 倍。</p>
+    <p>下面这块面板把 tokens 交给你。拖动时只有 tokens 变，每 token 的单价不动。</p>
+
+    <div class="panel" id="interaction">
+      <h3>你的上下文，你的显存</h3>
+      <fieldset class="field">
+        <legend>模型</legend>
+        <div class="segmented">
+          <span class="option"><input type="radio" name="model" id="model-llama2-7b" value="llama2-7b" checked><label for="model-llama2-7b" data-model="llama2-7b">Llama-2 · MHA · 32 层</label></span>
+          <span class="option"><input type="radio" name="model" id="model-llama2-13b" value="llama2-13b"><label for="model-llama2-13b" data-model="llama2-13b">Llama-2 · MHA · 40 层</label></span>
+          <span class="option"><input type="radio" name="model" id="model-llama3-8b" value="llama3-8b"><label for="model-llama3-8b" data-model="llama3-8b">Llama-3 · GQA · 32 层</label></span>
+          <span class="option"><input type="radio" name="model" id="model-mistral-7b" value="mistral-7b"><label for="model-mistral-7b" data-model="mistral-7b">Mistral · GQA · 32 层</label></span>
+          <span class="option"><input type="radio" name="model" id="model-llama3-70b" value="llama3-70b"><label for="model-llama3-70b" data-model="llama3-70b">Llama-3 · GQA · 80 层</label></span>
+          <span class="option"><input type="radio" name="model" id="model-deepseek-v2" value="deepseek-v2"><label for="model-deepseek-v2" data-model="deepseek-v2">DeepSeek-V2 · MLA · 60 层</label></span>
+        </div>
+      </fieldset>
+      <div class="field">
+        <label class="field-label" for="tokens">上下文长度</label>
+        <input type="range" id="tokens" min="128" max="32768" step="128" value="8192" aria-valuetext="8,192 tokens，缓存 4.00 GiB">
+        <div class="range-scale"><span>128</span><span>32,768</span></div>
+      </div>
+      <fieldset class="field">
+        <legend>显存预算</legend>
+        <div class="segmented segmented-budget">
+          <span class="option"><input type="radio" name="budget" id="budget-16" value="16"><label for="budget-16">16 GiB</label></span>
+          <span class="option"><input type="radio" name="budget" id="budget-24" value="24" checked><label for="budget-24">24 GiB</label></span>
+          <span class="option"><input type="radio" name="budget" id="budget-48" value="48"><label for="budget-48">48 GiB</label></span>
+          <span class="option"><input type="radio" name="budget" id="budget-80" value="80"><label for="budget-80">80 GiB</label></span>
+        </div>
+      </fieldset>
+      <div class="readout" id="readout" aria-live="polite" aria-atomic="false">
+        <p class="readout-line"><span class="readout-key">每 token</span><span class="readout-value" data-out="perToken">512 KiB</span><span class="readout-hint">拖动滑块不改变这个数</span></p>
+        <p class="readout-line"><span class="readout-key">缓存</span><span class="readout-value readout-big" data-out="cache">4.00 GiB</span></p>
+        <p class="readout-note" data-out="note">MHA：每层 32 个 KV head，每个 head 128 维</p>
+        <div class="bar-block">
+          <div class="usage-bar" data-bar aria-hidden="true"></div>
+          <p class="readout-line"><span class="readout-key">预算</span><span class="readout-text" data-out="usage">缓存 4.00 GiB + 权重 13.04 GiB，预算 24 GiB。</span></p>
+        </div>
+        <p class="readout-line"><span class="readout-key">decode</span><span class="readout-text" data-out="step">单步读取等于权重加整张缓存。</span></p>
+        <p class="readout-sentence" data-out="sentence">权重固定 13.04 GiB，缓存是你拖出来的 4.00 GiB。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="bandwidth" data-factor="bytes">
+    <h2>decode 是带宽的活</h2>
+    <p>decode 每步的算术量很小，小到盖不住内存访问。</p>
+    <p>一步要读完所有参数和整张缓存。Llama-2-7B 在 4k 上下文里是 13.04 GiB 权重加 2.00 GiB 缓存，合计 15.04 GiB。</p>
+    <p>在 2039 GB/s 上，一步 15.04 GiB 只够 126 tok/s；在 3350 GB/s 上是 207 tok/s。两个数都是带宽上限，由公式推得，不是实测。</p>
+    <p>上下文到 32k，同一步要读 29.04 GiB，带宽上限掉到 65 与 107 tok/s。</p>
+    <p>权重是常数，缓存不是。上下文越长，缓存越是大头。</p>
+    <figure class="fig-wrap"><svg class="fig fig-bandwidth" viewBox="0 0 520 300" role="img" aria-labelledby="f3-t" width="100%" height="auto"><title id="f3-t">权重固定，缓存随上下文增长</title><desc>4k 与 32k 各一条读取量条：权重段都是 13.04 GiB，缓存段从 2.00 GiB 长到 16.00 GiB，右端是每步读取总量与两个带宽上限。</desc><text class="t-strong" x="12" y="26">一次 decode step 要读的字节</text><text class="t-label" x="20" y="108">4k</text><text class="t-label" x="20" y="188">32k</text><rect class="a-weight" x="64" y="84" width="156.48" height="36"/><rect class="a-k" x="220.48" y="84" width="24" height="36"/><text class="t-on-ink" x="72" y="108">权重 13.04 GiB</text><path class="a-rule" d="M232.48 79 V84"/><text class="t-num t-k" x="244.48" y="76" text-anchor="end">2.00 GiB</text><text class="t-num" x="252.48" y="108">15.04 GiB</text><text class="t-num" x="64" y="148">带宽上限 126 / 207 tok/s</text><rect class="a-weight" x="64" y="164" width="156.48" height="36"/><rect class="a-k" x="220.48" y="164" width="192" height="36"/><text class="t-on-ink" x="72" y="188">权重 13.04 GiB</text><text class="t-on-k" x="228.48" y="188">16.00 GiB</text><text class="t-num" x="420.48" y="188">29.04 GiB</text><text class="t-num" x="64" y="228">带宽上限 65 / 107 tok/s</text><rect class="a-weight" x="64" y="250" width="12" height="12"/><text class="t-label" x="82" y="260">权重，两行等长</text><rect class="a-k" x="208" y="250" width="12" height="12"/><text class="t-label" x="226" y="260">缓存，随 tokens 长</text><text class="t-label" x="12" y="286">两条共用一把尺子；数字由公式推得。</text></svg><figcaption>两步读取放在同一把尺子上。权重段等长，缓存段随上下文长。</figcaption></figure>
+  </section>
+
+  <section class="section" id="structure" data-factor="heads">
+    <h2>结构减法：MHA → MQA → GQA → MLA</h2>
+    <p>最直接的办法是少存几个 KV head。MHA 每层 32 个，MQA 压到 1 个。</p>
+    <p>MQA 每 token 只留 16 KiB，代价是所有 query head 共用一组 K 和 V，表达能力受挤压。见 <a href="https://arxiv.org/abs/1911.02150">MQA</a>。</p>
+    <p>GQA 取中间，留 8 个 kv head。同样 32 层 128 维，每 token 从 512 KiB 降到 128 KiB，是 4 倍。见 <a href="https://arxiv.org/abs/2305.13245">GQA</a>。</p>
+    <p>同一把尺子上，MHA 的每 token 成本是 MQA 的 32 倍，是 GQA 的 4 倍，是 MLA 的 7.6 倍。</p>
+    <p>MLA 换了对象：不再按 head 存 K 和 V，每层每 token 存一个 576 维 latent。DeepSeek-V2 的 60 层加起来是 67.5 KiB。见 <a href="https://arxiv.org/abs/2405.04434">DeepSeek-V2</a>。</p>
+    <p>它放弃的是直接可读的 K 和 V。要用的时候得从 latent 投影出来，投影本身要算力。</p>
+    <p>页首那根 rail 上，kv_heads 与 head_dim 两段在 MLA 下合成一段 latent 576。这不是排版偷懒，是公式里那两项确实不存在了。</p>
+    <figure class="fig-wrap"><svg class="fig fig-mla" viewBox="0 0 460 300" role="img" aria-labelledby="f6-t" width="100%" height="auto"><title id="f6-t">MLA 把每层的 K 与 V 换成一段 latent</title><desc>左侧是 MHA 每层每 token 的 2 × 32 × 128 个 float，右侧是 MLA 的 576 个 float，中间是漏斗；两边层数不同，宽度不能直接相比。</desc><defs><pattern id="f6-h" width="6" height="6" patternUnits="userSpaceOnUse"><rect class="p-tint" width="6" height="6"/><path class="p-line" d="M0 6 L6 0"/></pattern></defs><text class="t-num" x="40" y="52">2 × 32 × 128 = 8192</text><text class="t-strong" x="272" y="72">MLA：每层一个 latent</text><text class="t-num" x="272" y="90">576 个 float</text><rect class="a-k" x="40" y="70" width="60" height="120"/><rect class="a-v" fill="url(#f6-h)" x="100" y="70" width="60" height="120"/><text class="t-on-ink" x="70" y="136" text-anchor="middle">K</text><text class="t-ink" x="130" y="136" text-anchor="middle">V</text><path class="a-funnel" d="M164 84 L164 176 L266 152 L266 108 Z"/><text class="t-label" x="215" y="136" text-anchor="middle">投影</text><rect class="a-latent" x="272" y="110" width="56" height="40"/><text class="t-on-ink" x="300" y="136" text-anchor="middle">latent</text><text class="t-label" x="40" y="214">MHA：每层每 token</text><text class="t-label" x="40" y="232">8192 个 float</text><text class="t-label" x="12" y="262">32 层与 60 层是两个模型，两条宽度不能直接相比。</text><text class="t-label" x="12" y="280">由公式推得。</text></svg><figcaption>漏斗画的是形状变化，不是比例尺。左边 32 层，右边 60 层，是两个模型。</figcaption></figure>
+  </section>
+
+  <section class="section" id="floor" data-factor="none">
+    <h2>公式是下限，不是账单</h2>
+    <p>公式算的是净字节。真实显存里还有分配方式带来的浪费。</p>
+    <p>按最大长度预留最简单：每个会话先占满一整段，空着的槽也占着显存。</p>
+    <p>PagedAttention 把缓存切成固定大小的 block，按需发放，空槽回到池子里。见 <a href="https://arxiv.org/abs/2309.06180">PagedAttention</a>。</p>
+    <p>prefix caching 让相同前缀只付一次：同一段 system prompt 在多个请求里复用同一份 K 和 V。</p>
+    <p>chunked prefill 与 continuous batching 调的是排队和批次，改不了单个 token 的单价。</p>
+    <p>到这一节 rail 该暗下去了。上面这些都不改因子，只消除浪费。</p>
+    <figure class="fig-wrap"><svg class="fig fig-blocks" viewBox="0 0 520 372" role="img" aria-labelledby="f5-t" width="100%" height="auto"><title id="f5-t">按最大长度预留与按块分配</title><desc>上半是四个槽按最大长度预留，空槽也被占住；下半是按 16 格一块按需分配，右侧是块表。两者都是结构示意，不含实测碎片率。</desc><text class="t-strong" x="12" y="24">按最大长度预留</text><text class="t-label" x="300" y="24">空槽也占着显存</text><text class="t-label" x="12" y="56">槽 1</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="46" width="14" height="13"/><rect class="a-k" x="72" y="46" width="14" height="13"/><rect class="a-k" x="88" y="46" width="14" height="13"/><rect class="a-k" x="104" y="46" width="14" height="13"/><rect class="a-k" x="120" y="46" width="14" height="13"/><rect class="a-k" x="136" y="46" width="14" height="13"/><rect class="a-k" x="152" y="46" width="14" height="13"/><rect class="a-k" x="168" y="46" width="14" height="13"/><rect class="a-k" x="184" y="46" width="14" height="13"/><rect class="a-k" x="200" y="46" width="14" height="13"/><rect class="a-reserved" x="216" y="46" width="14" height="13"/><rect class="a-reserved" x="232" y="46" width="14" height="13"/><rect class="a-reserved" x="248" y="46" width="14" height="13"/><rect class="a-reserved" x="264" y="46" width="14" height="13"/><rect class="a-reserved" x="280" y="46" width="14" height="13"/><rect class="a-reserved" x="296" y="46" width="14" height="13"/></g><text class="t-label" x="12" y="76">槽 2</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="66" width="14" height="13"/><rect class="a-k" x="72" y="66" width="14" height="13"/><rect class="a-k" x="88" y="66" width="14" height="13"/><rect class="a-k" x="104" y="66" width="14" height="13"/><rect class="a-k" x="120" y="66" width="14" height="13"/><rect class="a-k" x="136" y="66" width="14" height="13"/><rect class="a-reserved" x="152" y="66" width="14" height="13"/><rect class="a-reserved" x="168" y="66" width="14" height="13"/><rect class="a-reserved" x="184" y="66" width="14" height="13"/><rect class="a-reserved" x="200" y="66" width="14" height="13"/><rect class="a-reserved" x="216" y="66" width="14" height="13"/><rect class="a-reserved" x="232" y="66" width="14" height="13"/><rect class="a-reserved" x="248" y="66" width="14" height="13"/><rect class="a-reserved" x="264" y="66" width="14" height="13"/><rect class="a-reserved" x="280" y="66" width="14" height="13"/><rect class="a-reserved" x="296" y="66" width="14" height="13"/></g><text class="t-label" x="12" y="96">槽 3</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="86" width="14" height="13"/><rect class="a-k" x="72" y="86" width="14" height="13"/><rect class="a-k" x="88" y="86" width="14" height="13"/><rect class="a-k" x="104" y="86" width="14" height="13"/><rect class="a-reserved" x="120" y="86" width="14" height="13"/><rect class="a-reserved" x="136" y="86" width="14" height="13"/><rect class="a-reserved" x="152" y="86" width="14" height="13"/><rect class="a-reserved" x="168" y="86" width="14" height="13"/><rect class="a-reserved" x="184" y="86" width="14" height="13"/><rect class="a-reserved" x="200" y="86" width="14" height="13"/><rect class="a-reserved" x="216" y="86" width="14" height="13"/><rect class="a-reserved" x="232" y="86" width="14" height="13"/><rect class="a-reserved" x="248" y="86" width="14" height="13"/><rect class="a-reserved" x="264" y="86" width="14" height="13"/><rect class="a-reserved" x="280" y="86" width="14" height="13"/><rect class="a-reserved" x="296" y="86" width="14" height="13"/></g><text class="t-label" x="12" y="116">槽 4</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="106" width="14" height="13"/><rect class="a-k" x="72" y="106" width="14" height="13"/><rect class="a-reserved" x="88" y="106" width="14" height="13"/><rect class="a-reserved" x="104" y="106" width="14" height="13"/><rect class="a-reserved" x="120" y="106" width="14" height="13"/><rect class="a-reserved" x="136" y="106" width="14" height="13"/><rect class="a-reserved" x="152" y="106" width="14" height="13"/><rect class="a-reserved" x="168" y="106" width="14" height="13"/><rect class="a-reserved" x="184" y="106" width="14" height="13"/><rect class="a-reserved" x="200" y="106" width="14" height="13"/><rect class="a-reserved" x="216" y="106" width="14" height="13"/><rect class="a-reserved" x="232" y="106" width="14" height="13"/><rect class="a-reserved" x="248" y="106" width="14" height="13"/><rect class="a-reserved" x="264" y="106" width="14" height="13"/><rect class="a-reserved" x="280" y="106" width="14" height="13"/><rect class="a-reserved" x="296" y="106" width="14" height="13"/></g><text class="t-label" x="12" y="144">四个会话各占满一整段，没用上的格子退不回去。</text><text class="t-label" x="12" y="164">结构示意，不含实测碎片率。</text><text class="t-strong" x="12" y="196">按 16 格分块按需分配</text><text class="t-label" x="12" y="228">块 1</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="218" width="14" height="13"/><rect class="a-k" x="72" y="218" width="14" height="13"/><rect class="a-k" x="88" y="218" width="14" height="13"/><rect class="a-k" x="104" y="218" width="14" height="13"/><rect class="a-k" x="120" y="218" width="14" height="13"/><rect class="a-k" x="136" y="218" width="14" height="13"/><rect class="a-k" x="152" y="218" width="14" height="13"/><rect class="a-k" x="168" y="218" width="14" height="13"/><rect class="a-k" x="184" y="218" width="14" height="13"/><rect class="a-k" x="200" y="218" width="14" height="13"/><rect class="a-reserved" x="216" y="218" width="14" height="13"/><rect class="a-reserved" x="232" y="218" width="14" height="13"/><rect class="a-reserved" x="248" y="218" width="14" height="13"/><rect class="a-reserved" x="264" y="218" width="14" height="13"/><rect class="a-reserved" x="280" y="218" width="14" height="13"/><rect class="a-reserved" x="296" y="218" width="14" height="13"/></g><text class="t-label" x="12" y="248">块 2</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="238" width="14" height="13"/><rect class="a-k" x="72" y="238" width="14" height="13"/><rect class="a-k" x="88" y="238" width="14" height="13"/><rect class="a-k" x="104" y="238" width="14" height="13"/><rect class="a-k" x="120" y="238" width="14" height="13"/><rect class="a-k" x="136" y="238" width="14" height="13"/><rect class="a-reserved" x="152" y="238" width="14" height="13"/><rect class="a-reserved" x="168" y="238" width="14" height="13"/><rect class="a-reserved" x="184" y="238" width="14" height="13"/><rect class="a-reserved" x="200" y="238" width="14" height="13"/><rect class="a-reserved" x="216" y="238" width="14" height="13"/><rect class="a-reserved" x="232" y="238" width="14" height="13"/><rect class="a-reserved" x="248" y="238" width="14" height="13"/><rect class="a-reserved" x="264" y="238" width="14" height="13"/><rect class="a-reserved" x="280" y="238" width="14" height="13"/><rect class="a-reserved" x="296" y="238" width="14" height="13"/></g><text class="t-label" x="12" y="268">块 3</text><g shape-rendering="crispEdges"><rect class="a-k" x="56" y="258" width="14" height="13"/><rect class="a-k" x="72" y="258" width="14" height="13"/><rect class="a-k" x="88" y="258" width="14" height="13"/><rect class="a-k" x="104" y="258" width="14" height="13"/><rect class="a-reserved" x="120" y="258" width="14" height="13"/><rect class="a-reserved" x="136" y="258" width="14" height="13"/><rect class="a-reserved" x="152" y="258" width="14" height="13"/><rect class="a-reserved" x="168" y="258" width="14" height="13"/><rect class="a-reserved" x="184" y="258" width="14" height="13"/><rect class="a-reserved" x="200" y="258" width="14" height="13"/><rect class="a-reserved" x="216" y="258" width="14" height="13"/><rect class="a-reserved" x="232" y="258" width="14" height="13"/><rect class="a-reserved" x="248" y="258" width="14" height="13"/><rect class="a-reserved" x="264" y="258" width="14" height="13"/><rect class="a-reserved" x="280" y="258" width="14" height="13"/><rect class="a-reserved" x="296" y="258" width="14" height="13"/></g><text class="t-label" x="12" y="288">块 4</text><g shape-rendering="crispEdges"><rect class="a-free" x="56" y="278" width="14" height="13"/><rect class="a-free" x="72" y="278" width="14" height="13"/><rect class="a-free" x="88" y="278" width="14" height="13"/><rect class="a-free" x="104" y="278" width="14" height="13"/><rect class="a-free" x="120" y="278" width="14" height="13"/><rect class="a-free" x="136" y="278" width="14" height="13"/><rect class="a-free" x="152" y="278" width="14" height="13"/><rect class="a-free" x="168" y="278" width="14" height="13"/><rect class="a-free" x="184" y="278" width="14" height="13"/><rect class="a-free" x="200" y="278" width="14" height="13"/><rect class="a-free" x="216" y="278" width="14" height="13"/><rect class="a-free" x="232" y="278" width="14" height="13"/><rect class="a-free" x="248" y="278" width="14" height="13"/><rect class="a-free" x="264" y="278" width="14" height="13"/><rect class="a-free" x="280" y="278" width="14" height="13"/><rect class="a-free" x="296" y="278" width="14" height="13"/></g><text class="t-label" x="332" y="218">块表</text><text class="t-label" x="332" y="236">块 1 → 序列 A</text><text class="t-label" x="332" y="252">块 2 → 序列 B</text><text class="t-label" x="332" y="268">块 3 → 序列 C</text><text class="t-label" x="332" y="284">块 4 → 未分配</text><text class="t-label" x="12" y="316">块按需发放，空块留给下一个请求。</text><text class="t-label" x="12" y="336">结构示意，不含实测碎片率。</text><rect class="a-k" x="12" y="348" width="12" height="12"/><text class="t-label" x="30" y="358">有 token</text><rect class="a-reserved" x="96" y="348" width="12" height="12"/><text class="t-label" x="114" y="358">已占住，没有 token</text><rect class="a-free" x="250" y="348" width="12" height="12"/><text class="t-label" x="268" y="358">还没分配</text></svg><figcaption>同一批 token 的两种放法。差别在谁占住位置，谁把位置还回去。</figcaption></figure>
+  </section>
+
+  <section class="section" id="tokens" data-factor="tokens">
+    <h2>按住 tokens：滑窗、sink、驱逐</h2>
+    <p>第二类手段直接减少 tokens。</p>
+    <p>滑窗只保留最近一段 token，更早的 K 和 V 丢掉。Mistral-7B 走的是这条路。见 <a href="https://arxiv.org/abs/2310.06825">Mistral 7B</a>。</p>
+    <p>光有滑窗会崩：开头的 token 一旦被挤出窗口，注意力失去锚点。attention sink 把开头几位固定住。见 <a href="https://arxiv.org/abs/2309.17453">StreamingLLM</a>。</p>
+    <p>H2O 一类按累计注意力权重驱逐不重要的 token，留下的不一定是最近的那些。见 <a href="https://arxiv.org/abs/2306.14048">H2O</a>。</p>
+    <p>三者都把 tokens 按住，代价都是长程召回：被丢掉的 token 不会回来。</p>
+  </section>
+
+  <section class="section" id="bytes" data-factor="bytes">
+    <h2>按住 bytes：量化 cache</h2>
+    <p>最后一个因子是 bytes_per_element。它也是唯一一个不动模型就能改的因子。</p>
+    <p>fp16 每元素 2 字节。缓存量化把 K 和 V 压到 1 字节，甚至 0.5 字节。</p>
+    <p>KIVI 这类做法对 K 和 V 用不同的量化粒度与分组，因为两者的分布不同。见 <a href="https://arxiv.org/abs/2402.02750">KIVI</a>。</p>
+    <p>代价写在精度上：上下文越长，误差累积越明显。</p>
+  </section>
+
+  <section class="section" id="myths" data-factor="none">
+    <h2>四个要被打死的直觉</h2>
+    <p>四个说法听起来省显存，实际不省。</p>
+    <table class="myth-table">
+      <caption>四条直觉，逐条对账</caption>
+      <thead>
+        <tr><th scope="col">直觉</th><th scope="col">实际情况</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">FlashAttention 应该会缩小 KV cache</th><td data-label="实际情况">它减的是 HBM 与片上 SRAM 之间的搬运，缓存字节一个不少。见 <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a>。</td></tr>
+        <tr><th scope="row">加大 batch 就能摊薄缓存</th><td data-label="实际情况">batch 摊薄的是权重。每个序列仍要自己的一份缓存。</td></tr>
+        <tr><th scope="row">上下文窗口够长就随便开</th><td data-label="实际情况">窗口不是免费内存。窗口开多大，缓存就占多大。</td></tr>
+        <tr><th scope="row">缓存量化一下没有代价</th><td data-label="实际情况">量化换的是精度，长上下文上最先感觉到。</td></tr>
+      </tbody>
+    </table>
+    <p>四条都指向同一个误会：把算力优化当成省显存。</p>
+  </section>
+
+  <section class="section" id="knobs" data-factor="all">
+    <h2>收账：三个旋钮</h2>
+    <p>页面上的所有手段，落到公式上只有三种动作。</p>
+    <div class="ledger">
+      <div class="ledger-col">
+        <p class="ledger-title">六个因子</p>
+        <p class="formula">2 × layers × kv_heads × head_dim × tokens × bytes_per_element</p>
+        <p class="ledger-note">乘积是下限。分配方式决定多付多少。</p>
+      </div>
+      <div class="ledger-col">
+        <p class="ledger-title">三个旋钮</p>
+        <ul class="knobs">
+          <li><strong>压低单价</strong>MQA、GQA、MLA、缓存量化</li>
+          <li><strong>不存两遍</strong>分块分配、prefix caching</li>
+          <li><strong>少存 token</strong>滑窗、attention sink、驱逐</li>
+        </ul>
+      </div>
+    </div>
+    <p>前两个动作改因子，第三个动作改 tokens。改不动的那个因子是权重：每步读一遍，与上下文无关。</p>
+    <p>值得记三个数：每 token 512 KiB，公式开头的 2，decode 受带宽约束。</p>
+    <p>下次 OOM，先看缓存占了多少，再看权重，最后看分配。</p>
+  </section>
+</main>
+
+<script type="module">export const MODELS = {
+  "llama2-7b": {
+    label: "Llama-2-7B · MHA",
+    layers: 32,
+    kvHeads: 32,
+    headDim: 128,
+    perTokenBytes: 524288,
+    note: "MHA：每层 32 个 KV head，每个 head 128 维",
+  },
+  "llama2-13b": {
+    label: "Llama-2-13B · MHA",
+    layers: 40,
+    kvHeads: 40,
+    headDim: 128,
+    perTokenBytes: 819200,
+    note: "MHA：层数与 kv head 数一起涨，单价跟着涨",
+  },
+  "llama3-8b": {
+    label: "Llama-3-8B · GQA",
+    layers: 32,
+    kvHeads: 8,
+    headDim: 128,
+    perTokenBytes: 131072,
+    note: "GQA：多个 query head 共用 8 个 KV head",
+  },
+  "mistral-7b": {
+    label: "Mistral-7B · GQA",
+    layers: 32,
+    kvHeads: 8,
+    headDim: 128,
+    perTokenBytes: 131072,
+    note: "GQA：形状与 Llama-3-8B 相同",
+  },
+  "llama3-70b": {
+    label: "Llama-3-70B · GQA",
+    layers: 80,
+    kvHeads: 8,
+    headDim: 128,
+    perTokenBytes: 327680,
+    note: "GQA：层数多，每 token 的单价跟着涨",
+  },
+  "deepseek-v2": {
+    label: "DeepSeek-V2 · MLA",
+    layers: 60,
+    kvHeads: null,
+    headDim: null,
+    perTokenBytes: 69120,
+    note: "MLA：每层每 token 一个 576 维 latent",
+  },
+};
+
+const KIB = 1024;
+const MIB = KIB * KIB;
+const GIB = MIB * KIB;
+const KNOWN_WEIGHTS = Object.freeze({ "llama2-7b": 14e9 });
+const BANDWIDTHS = [2039, 3350];
+const BAR_CELLS = 24;
+const RENDER_INTERVAL = 150;
+const TOKEN_MIN = 128;
+const TOKEN_MAX = 32768;
+const TOKEN_STEP = 128;
+const PAGE_FACTOR = 10;
+
+export function cacheBytes(key, tokens) {
+  const model = MODELS[key];
+  if (!model) return 0;
+  if (!Number.isFinite(tokens) || tokens <= 0) return 0;
+  return model.perTokenBytes * Math.floor(tokens);
+}
+
+export function weightsBytes(key) {
+  return Object.hasOwn(KNOWN_WEIGHTS, key) ? KNOWN_WEIGHTS[key] : null;
+}
+
+export function stepReadBytes(key, tokens) {
+  const weights = weightsBytes(key);
+  if (weights === null) return null;
+  return cacheBytes(key, tokens) + weights;
+}
+
+export function tokPerSec(key, tokens, bandwidthGBs) {
+  const bytes = stepReadBytes(key, tokens);
+  if (bytes === null || !(bytes > 0)) return null;
+  if (!(bandwidthGBs > 0)) return null;
+  return Math.floor((bandwidthGBs * 1e9) / bytes);
+}
+
+function trim(value) {
+  const fixed = value.toFixed(2).replace(/0+$/, "");
+  return fixed.endsWith(".") ? fixed.slice(0, -1) : fixed;
+}
+
+export function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return { value: "0", unit: "B" };
+  if (bytes >= GIB) return { value: (bytes / GIB).toFixed(2), unit: "GiB" };
+  if (bytes >= MIB) return { value: trim(bytes / MIB), unit: "MiB" };
+  if (bytes >= KIB) return { value: trim(bytes / KIB), unit: "KiB" };
+  return { value: String(Math.round(bytes)), unit: "B" };
+}
+
+const join = (bytes) => {
+  const text = formatBytes(bytes);
+  return `${text.value} ${text.unit}`;
+};
+
+const count = (value) => value.toLocaleString("en-US");
+
+function mount(doc) {
+  const rail = doc.getElementById("rail");
+  const tokenInput = doc.getElementById("tokens");
+  const readout = doc.getElementById("readout");
+  if (!rail || !tokenInput || !readout) return;
+
+  const bar = readout.querySelector("[data-bar]");
+  const modelInputs = Array.from(doc.querySelectorAll('input[name="model"]'));
+  const budgetInputs = Array.from(doc.querySelectorAll('input[name="budget"]'));
+  if (!bar || modelInputs.length === 0 || budgetInputs.length === 0) return;
+
+  const picked = (inputs) => inputs.find((input) => input.checked) || inputs[0];
+
+  const state = {
+    model: picked(modelInputs).value,
+    tokens: Number(tokenInput.value),
+    budget: Number(picked(budgetInputs).value),
+  };
+
+  const out = {
+    perToken: readout.querySelector('[data-out="perToken"]'),
+    cache: readout.querySelector('[data-out="cache"]'),
+    note: readout.querySelector('[data-out="note"]'),
+    usage: readout.querySelector('[data-out="usage"]'),
+    step: readout.querySelector('[data-out="step"]'),
+    sentence: readout.querySelector('[data-out="sentence"]'),
+  };
+
+  const live = {
+    layers: rail.querySelector('[data-live="layers"]'),
+    kvHeads: rail.querySelector('[data-live="kvHeads"]'),
+    headDim: rail.querySelector('[data-live="headDim"]'),
+    tokens: rail.querySelector('[data-live="tokens"]'),
+    product: rail.querySelector('[data-live="product"]'),
+    compactTokens: rail.querySelector('[data-live="compact-tokens"]'),
+    compactCache: rail.querySelector('[data-live="compact-cache"]'),
+  };
+
+  const factors = Array.from(rail.querySelectorAll(".factor"));
+  const cells = [];
+  for (let index = 0; index < BAR_CELLS; index += 1) {
+    const cell = doc.createElement("span");
+    cell.className = "bar-cell";
+    cells.push(cell);
+    bar.append(cell);
+  }
+
+  doc.querySelectorAll("[data-model]").forEach((node) => {
+    const model = MODELS[node.dataset.model];
+    if (model) node.textContent = model.label;
+  });
+
+  function render() {
+    const model = MODELS[state.model];
+    const cache = cacheBytes(state.model, state.tokens);
+    const weights = weightsBytes(state.model);
+    const read = stepReadBytes(state.model, state.tokens);
+    const cacheText = join(cache);
+    const tokensText = count(state.tokens);
+    const budgetBytes = state.budget * GIB;
+    const perCell = budgetBytes / BAR_CELLS;
+
+    out.perToken.textContent = join(model.perTokenBytes);
+    out.cache.textContent = cacheText;
+    out.note.textContent = model.note;
+
+    const used = weights === null ? cache : cache + weights;
+    const over = used > budgetBytes;
+    const cacheCells = Math.min(BAR_CELLS, Math.round(cache / perCell));
+    const weightCells = weights === null ? 0 : Math.max(0, Math.round(weights / perCell));
+    cells.forEach((cell, index) => {
+      if (index < cacheCells) cell.className = "bar-cell is-cache";
+      else if (index < cacheCells + weightCells) cell.className = "bar-cell is-weight";
+      else cell.className = "bar-cell";
+    });
+    bar.dataset.over = over ? "true" : "false";
+
+    if (weights === null) {
+      out.usage.textContent = `缓存 ${cacheText}，预算 ${state.budget} GiB。`;
+    } else if (over) {
+      out.usage.textContent = `缓存 ${cacheText} + 权重 ${join(weights)}，超出预算 ${join(used - budgetBytes)}。`;
+    } else {
+      out.usage.textContent = `缓存 ${cacheText} + 权重 ${join(weights)}，预算 ${state.budget} GiB。`;
+    }
+
+    if (read === null) {
+      out.step.textContent = "本页未给出该模型的权重。";
+    } else {
+      const low = tokPerSec(state.model, state.tokens, BANDWIDTHS[0]);
+      const high = tokPerSec(state.model, state.tokens, BANDWIDTHS[1]);
+      out.step.textContent = `单步读取 ${join(read)} · 带宽上限 ${low} / ${high} tok/s。`;
+    }
+
+    out.sentence.textContent =
+      weights === null
+        ? `本页未给出该模型的权重，缓存是你拖出来的 ${cacheText}。`
+        : `权重固定 ${join(weights)}，缓存是你拖出来的 ${cacheText}。`;
+
+    tokenInput.setAttribute("aria-valuetext", `${tokensText} tokens，缓存 ${cacheText}`);
+
+    live.layers.textContent = String(model.layers);
+    live.tokens.textContent = tokensText;
+    live.product.textContent = cacheText;
+    live.compactTokens.textContent = tokensText;
+    live.compactCache.textContent = cacheText;
+    if (model.kvHeads === null) {
+      rail.dataset.mla = "true";
+      live.kvHeads.textContent = "";
+      live.headDim.textContent = "";
+    } else {
+      rail.dataset.mla = "false";
+      live.kvHeads.textContent = String(model.kvHeads);
+      live.headDim.textContent = String(model.headDim);
+    }
+  }
+
+  let timer = 0;
+  let lastRun = 0;
+  function schedule() {
+    if (timer) return;
+    const wait = Math.max(0, RENDER_INTERVAL - (performance.now() - lastRun));
+    timer = setTimeout(() => {
+      timer = 0;
+      lastRun = performance.now();
+      render();
+    }, wait);
+  }
+
+  function setTokens(value) {
+    const snapped = Math.round(value / TOKEN_STEP) * TOKEN_STEP;
+    state.tokens = Math.min(TOKEN_MAX, Math.max(TOKEN_MIN, snapped));
+    tokenInput.value = String(state.tokens);
+    schedule();
+  }
+
+  tokenInput.addEventListener("input", () => {
+    state.tokens = Number(tokenInput.value);
+    schedule();
+  });
+
+  tokenInput.addEventListener("keydown", (event) => {
+    if (event.key === "PageUp" || event.key === "PageDown") {
+      event.preventDefault();
+      setTokens(event.key === "PageUp" ? state.tokens * PAGE_FACTOR : state.tokens / PAGE_FACTOR);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setTokens(TOKEN_MIN);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setTokens(TOKEN_MAX);
+    }
+  });
+
+  modelInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      state.model = input.value;
+      render();
+    });
+  });
+
+  budgetInputs.forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      state.budget = Number(input.value);
+      render();
+    });
+  });
+
+  const hero = doc.querySelector(".hero");
+  const sections = Array.from(doc.querySelectorAll("section[data-factor]"));
+  let ticking = false;
+
+  function updateScrollState() {
+    ticking = false;
+    if (hero) rail.classList.toggle("is-pinned", hero.getBoundingClientRect().bottom <= 0);
+    const line = window.innerHeight * 0.45;
+    let current = null;
+    sections.forEach((section) => {
+      if (section.getBoundingClientRect().top <= line) current = section;
+    });
+    const key = current ? current.dataset.factor : "";
+    factors.forEach((factor) => {
+      const active = Boolean(current) && (key === "all" || factor.dataset.factor === key);
+      factor.classList.toggle("is-active", active);
+    });
+    rail.classList.toggle("is-floor", Boolean(current) && current.id === "floor");
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(updateScrollState);
+  }
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+
+  render();
+  updateScrollState();
+}
+
+if (typeof document === "object" && document !== null) {
+  mount(document);
+}
+</script>
+</body>
+</html>
