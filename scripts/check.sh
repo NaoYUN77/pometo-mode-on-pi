@@ -38,6 +38,15 @@ if [ -f scripts/test-bash-guard.mjs ]; then
   fi
 fi
 
+# The README's numbers, which rot the moment a skill is added.
+if [ -f scripts/verify-readme.mjs ]; then
+  echo
+  echo "--- readme ---"
+  if ! node scripts/verify-readme.mjs; then
+    rc=1
+  fi
+fi
+
 # Every page or module that carries its own verification script.
 found=0
 while IFS= read -r script; do
