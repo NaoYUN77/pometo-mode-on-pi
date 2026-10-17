@@ -56,6 +56,22 @@ having.
 | transcripts | `~/.pi/agent/sessions/`, one JSONL per session. Subagents run with `--no-session`, so their transcript is the parent's tool result |
 | `/poteto-mode` | `.pi/prompts/poteto-mode.md`, expanded as `/poteto-mode <task>` |
 
+## Where a skill says `agent-transcripts/`
+
+Four vendored skills (`automate-me`, `eval`, `orchestrate`, `session-pickup`) say
+a workspace's transcripts live in `agent-transcripts/`, and that "the system
+prompt names this path". In pi there is no such directory and the system prompt
+names no such path. The transcripts are here:
+
+```
+~/.pi/agent/sessions/<project>/<timestamp>_<id>.jsonl
+```
+
+Do not search the filesystem for it. `find / -name agent-transcripts` never
+returns on this machine and pi's bash has no timeout, so the session stops dead
+with no error. `.pi/extensions/bash-guard.ts` refuses a search rooted at a
+filesystem root, so the call fails fast with a reason instead of hanging.
+
 ## Cursor-only features
 
 Automations, Bugbot, cloud agents, and Cursor's pull request tool have no pi
