@@ -87,7 +87,7 @@ so `read` and `bash` fail with `Cannot read properties of undefined`. Version
 .agents/pstack-models.md   8K   91 lines: role to model table
 docs/pi-equivalence.md     8K   24 rows: each CC mechanism, its provider here, its proof
 .pi/extensions/          104K
-  subagent/index.ts     1343 lines
+  subagent/index.ts     1358 lines
   skill-routes.ts        340 lines
   todo.ts                301 lines
   bash-guard.ts          148 lines
@@ -202,7 +202,7 @@ covering both `/routes` output paths), the bash guard (24), the subagent's outpu
 handling (28: the 50 KB cap never splits a character, and stdout split
 mid-character still decodes whole), the seat files (39), the kill escalation
 (11), the child protocol (20: a steer that arrives after the settle is reported
-as not delivered), the background path end to end (27, against a fake pi), the
+as not delivered), the background path end to end (31, against a fake pi), the
 GitHub tool's pure half, the tool-name conflict guard (16), the equivalence table
 (100: every claim names a file that exists), and the README's numbers (20).
 Prints `check: green` or `check: RED`.
@@ -283,7 +283,7 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
 .agents/pstack-models.md   8K   91 行：角色到模型表
 docs/pi-equivalence.md     8K   24 行：每条 CC 机制、它在 pi 上由谁提供、证据
 .pi/extensions/          104K
-  subagent/index.ts     1343 行
+  subagent/index.ts     1358 行
   skill-routes.ts        340 行
   todo.ts                301 行
   bash-guard.ts          148 行
@@ -394,7 +394,7 @@ bash scripts/check.sh
 输出路径）、bash 守卫（24 项）、subagent 的输出处理（28 项：50 KB 截断不切开字符，
 stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、SIGKILL 兜底
 （11 项）、子进程协议（20 项：settle 之后才到的 steer 会报「没送进去」）、后台链路端到端
-（27 项，对着一个假 pi）、GitHub 工具里不碰网络的那一半、工具名冲突（16 项）、等价表
+（31 项，对着一个假 pi）、GitHub 工具里不碰网络的那一半、工具名冲突（16 项）、等价表
 （100 项：每条声明都得指向一个真实存在的文件）、README 里的每个数字（20 项）。打印
 `check: green` 或 `check: RED`。
 

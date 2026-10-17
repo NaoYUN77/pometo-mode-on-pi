@@ -30,7 +30,7 @@ there is nothing to steer it from.
 | a chained flow with `{previous}` | `{ chain: [{agent, task}, …] }` |
 | `readonly: true` | `agent: "explorer"` |
 | `environment: "cloud"`, own worktree | `cwd: "<path to a worktree you made>"`. pi has no isolation flag, so make the worktree yourself and pass its path |
-| `run_in_background` | `run_in_background: true` on a single-mode call. Returns an `agentId` at once and posts a completion notice when the child exits |
+| `run_in_background` | `run_in_background: true` on a single-mode call. Returns an `agentId` at once and posts a completion notice when the child exits. Refused in `print` and `json` mode, where the session ends at settle and would kill the child |
 | `SendMessage` | `send_message`, addressed by `agentId`. It steers a run that is still live; a run that already settled is refused, because the child exits when it does |
 | `ListAgents` | `list_agents` |
 | `stop_agent` | not available. End the session, or let the run finish |

@@ -860,6 +860,21 @@ export function install(pi: ExtensionAPI, options: SubagentOptions = {}): void {
 			}
 
 			if (params.agent && params.task && params.run_in_background) {
+				// A one-shot run exits the moment it settles, and shutting down ends every
+				// child. The caller would be told "you will be notified" and then never be.
+				// Refusing is the honest answer; a foreground call is the substitute.
+				if (ctx.mode === "print" || ctx.mode === "json") {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `run_in_background needs a session that outlives this turn, and this is a one-shot ${ctx.mode} run: the process exits when it settles, which ends the child before its notice can arrive. Use a foreground call instead, or run the task in an interactive session.`,
+							},
+						],
+						isError: true,
+						details: makeDetails("single")([]),
+					};
+				}
 				const agent = agents.find((a) => a.name === params.agent);
 				if (!agent) {
 					return {

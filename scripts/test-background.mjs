@@ -312,6 +312,46 @@ async function launch(w, pi, ctx, params) {
 	w.cleanup();
 }
 
+// --- a one-shot session refuses a background run ------------------------
+//
+// `pi -p` and `--mode json` exit the moment they settle, and shutting down ends
+// every child. Launching one there would promise a notice that can never arrive.
+
+{
+	const w = project({ default: [{ reply: "should not run" }] });
+	const pi = fakePi();
+	install(pi.api, { piInvocation: w.piInvocation });
+	const ctx = { ...fakeCtx(w.dir), mode: "print" };
+
+	const result = await launch(w, pi, ctx, { agent: "worker", task: "bg", run_in_background: true });
+	check("a print-mode background launch is refused", result.isError === true, JSON.stringify(result.content[0].text).slice(0, 120));
+	check(
+		"the refusal says why",
+		/one-shot print run/i.test(result.content[0].text),
+		result.content[0].text.slice(0, 200),
+	);
+	check(
+		"no child was started",
+		!w.entries().some((r) => r.kind === "invocation"),
+		JSON.stringify(w.entries().slice(0, 2)),
+	);
+	w.cleanup();
+}
+
+// --- an rpc session is allowed ------------------------------------------
+
+{
+	const w = project({ default: [{ reply: "ran" }] });
+	const pi = fakePi();
+	install(pi.api, { piInvocation: w.piInvocation });
+	const ctx = { ...fakeCtx(w.dir), mode: "rpc" };
+
+	const result = await launch(w, pi, ctx, { agent: "worker", task: "bg", run_in_background: true });
+	check("an rpc-mode background launch is allowed", !result.isError, JSON.stringify(result.content[0].text).slice(0, 120));
+	await w.until(() => pi.messages.length > 0, 10_000);
+	w.cleanup();
+}
+
 // --- a foreground call is unchanged -------------------------------------
 //
 // The one-shot path still runs and still returns the text, so adding background
