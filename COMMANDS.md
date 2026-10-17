@@ -198,8 +198,8 @@ playbook          /bug-fix /pause-safely…  23 个        ← 第四层
 ## 十一半、测这套命令本身
 
 ```bash
-node scripts/test-routes.mjs   # 28 项，零模型调用，一秒出结果
-bash scripts/check.sh          # doctor + 路由测试 + 所有 verify.mjs
+node scripts/test-routes.mjs   # 35 项，零模型调用，一秒出结果
+bash scripts/check.sh          # doctor + 全部 9 个不花钱的测试脚本
 ```
 
 `test-routes.mjs` 用 Node 24 直接 import 那个 `.ts` 扩展，喂输入、看输出。它验证的是**改写逻辑**：

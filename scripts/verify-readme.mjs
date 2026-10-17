@@ -87,6 +87,16 @@ check("subagent line count", readme.includes(`${ext(".pi/extensions/subagent/ind
 const seats = fs.readdirSync(path.join(root, ".pi", "agents")).filter((f) => f.endsWith(".md"));
 check("README says 7 seats", readme.includes("7 seat") && seats.length === 7, `${seats.length} on disk`);
 
+// The harness doc, the equivalence table, and the lib modules the README quotes.
+check("pi.md line count", readme.includes(`${ext(".agents/harness/pi.md")} lines`), `${ext(".agents/harness/pi.md")}`);
+const libLines = fs
+	.readdirSync(path.join(root, ".pi", "lib"))
+	.reduce((sum, f) => sum + ext(path.join(".pi", "lib", f)), 0);
+check("lib line count", readme.includes(`${libLines} lines`), `${libLines}`);
+check("README names docs/pi-equivalence.md", readme.includes("docs/pi-equivalence.md"));
+const suites = fs.readdirSync(path.join(root, "scripts")).filter((f) => /^(test-|verify-).*\.mjs$/.test(f)).length;
+check("README counts the zero-token suites", readme.includes(`${suites} zero-token test suites`), `${suites} on disk`);
+
 console.log();
 if (failed > 0) {
 	console.log(`readme: ${failed} failed`);
