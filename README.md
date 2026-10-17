@@ -6,7 +6,8 @@ new one; where it differs, the difference is named below.
 
 ```
 .pi/prompts/poteto-mode.md   /poteto-mode <task>, the one way into the rigorous mode
-.pi/extensions/skill-routes.ts  bare /how, /arena, /interrogate …
+.pi/extensions/skill-routes.ts  bare /how, /arena, /bug-fix …
+.pi/extensions/todo.ts          the todo tool, so a playbook's steps are a real list
 .pi/agents/                  seven seats, each with a provider/model id
 .pi/extensions/subagent/     the subagent tool, vendored, defaulting to project agents
 .agents/skills/              pstack 0.15.25, vendored

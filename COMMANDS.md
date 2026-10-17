@@ -174,6 +174,8 @@
 | 输出 | `/copy` `/export` `/share` `/bug` |
 | 系统 | `/settings` `/trust` `/reload` `/hotkeys` `/changelog` `/quit` |
 
+还有两个本地命令：`/routes` 列路由，`/todos` 看 `/poteto-mode` 开的那张清单。
+
 `/reload` 在改了 `.pi/` 里的东西之后用。`/trust` 每个目录一次，向下继承。
 
 ---

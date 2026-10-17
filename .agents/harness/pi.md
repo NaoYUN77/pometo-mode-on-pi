@@ -12,7 +12,7 @@ running any pstack skill. Where this file and a skill disagree, this file wins.
 | --- | --- |
 | `Task` | the `subagent` tool |
 | `AskQuestion` | ask in plain text |
-| Open a todolist | `todo` tool when the session has it, else keep the list in the reply |
+| Open a todolist | `todo` tool, registered by `.pi/extensions/todo.ts`. `/todos` shows the list |
 | `Grep`, `Glob` | `grep`, `find` |
 | `Read` | `read` |
 
@@ -60,6 +60,17 @@ having.
 
 Automations, Bugbot, cloud agents, and Cursor's pull request tool have no pi
 equivalent. Say so, skip that step, and continue.
+
+Three skills the router names are not installed here, because they ship with
+Cursor or with the `cursor-team-kit` plugin. Each has the substitute below. Do not
+pretend to run one.
+
+| Named in a skill | Here |
+| --- | --- |
+| `/deslop` (before commit) | `unslop` over the diff's prose, then `no-comments` before review |
+| `control-cli` / `control-ui` (before shipping a UI) | not available. Drive the artifact yourself, or use the project's `verify-*` skill |
+| `create-skill` (Cursor built-in) | the `authoring-a-skill` playbook |
+| `/loop` (wake mechanism) | not available. `autonomous-run`, `autopilot-full`, `autopilot-stack` and `orchestrate` lose their wake step; a run happens in one sitting, or a person re-invokes it |
 
 ## Why there is no always-on mode block
 
