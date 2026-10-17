@@ -150,3 +150,29 @@ export function renderIssueTable(repo: string, issues: Issue[]): string {
 	}
 	return lines.join("\n");
 }
+
+/**
+ * Tools that change something on GitHub. These ask before running.
+ * A plain array, not a Set, so the verify script can compare it whole.
+ */
+export const WRITES = ["gh_issue_claim", "gh_pr_create"];
+
+const MAX_QUESTION = 160;
+
+/**
+ * One line the user can judge at a glance. Never a wall of text: a 300-character
+ * title would otherwise bury the part that matters.
+ */
+export function summarize(toolName: string, input: Record<string, unknown>): string {
+	let text: string;
+	if (toolName === "gh_issue_claim") {
+		const assignee = input.assignee ?? "@me";
+		const branch = input.branch ? ` and cut branch ${input.branch}` : "";
+		text = `Assign #${input.number} to ${assignee}${branch}?`;
+	} else {
+		const base = input.base ? ` into ${input.base}` : "";
+		const draft = input.draft ? " as a draft" : "";
+		text = `Open a pull request${base}${draft} titled ${JSON.stringify(input.title)}?`;
+	}
+	return text.length > MAX_QUESTION ? `${text.slice(0, MAX_QUESTION - 1)}…` : text;
+}

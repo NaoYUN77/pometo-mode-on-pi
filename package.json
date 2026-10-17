@@ -1,6 +1,6 @@
 {
   "name": "pometo-mode-on-pi",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "pstack's working mode on pi: 23 playbooks, 55 skills, bare /how /bug-fix routes, subagent seats",
   "keywords": [
     "pi-package",
@@ -38,6 +38,6 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node scripts/test-routes.mjs && node scripts/test-bash-guard.mjs && node scripts/verify-gh-tool.mjs && node scripts/test-tool-conflicts.mjs && node scripts/verify-readme.mjs"
+    "test": "node scripts/test-routes.mjs && node scripts/test-bash-guard.mjs && node scripts/verify-gh-tool.mjs"
   }
 }

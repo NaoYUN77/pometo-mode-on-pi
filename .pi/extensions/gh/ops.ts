@@ -35,8 +35,14 @@ export type Exec = (
  * One place where a non-zero exit becomes a message the model can act on.
  * gh's own stderr is kept: it is the only thing that says *why*.
  */
-async function runGh(exec: Exec, args: string[], what: string, cwd = ""): Promise<string> {
-	const result = await exec(args, cwd);
+async function runGh(
+	exec: Exec,
+	args: string[],
+	what: string,
+	cwd = "",
+	signal?: AbortSignal,
+): Promise<string> {
+	const result = await exec(args, cwd, signal);
 	if (result.code !== 0) {
 		const detail = result.stderr.trim() || `exit ${result.code}`;
 		throw new Error(`${what} failed: ${detail}`);
@@ -46,9 +52,13 @@ async function runGh(exec: Exec, args: string[], what: string, cwd = ""): Promis
 
 export type ListResult = { issues: ReturnType<typeof toIssues>; text: string };
 
-export async function listIssues(exec: Exec, options: IssueListOptions & { cwd?: string }): Promise<ListResult> {
+export async function listIssues(
+	exec: Exec,
+	options: IssueListOptions & { cwd?: string },
+	signal?: AbortSignal,
+): Promise<ListResult> {
 	const { cwd, ...listOptions } = options;
-	const stdout = await runGh(exec, buildIssueListArgs(listOptions), "gh issue list", cwd);
+	const stdout = await runGh(exec, buildIssueListArgs(listOptions), "gh issue list", cwd, signal);
 	let raw: RawIssue[];
 	try {
 		raw = JSON.parse(stdout) as RawIssue[];
@@ -68,12 +78,13 @@ export type ClaimResult = { text: string; ran: string[] };
 export async function claimIssue(
 	exec: Exec,
 	options: IssueClaimOptions & { cwd?: string },
+	signal?: AbortSignal,
 ): Promise<ClaimResult> {
 	const { cwd, ...claimOptions } = options;
 	const commands = buildIssueClaimArgs(claimOptions);
 	const ran: string[] = [];
 	for (const args of commands) {
-		await runGh(exec, args, `gh ${args.slice(0, 2).join(" ")}`, cwd);
+		await runGh(exec, args, `gh ${args.slice(0, 2).join(" ")}`, cwd, signal);
 		ran.push(args.slice(0, 2).join(" "));
 	}
 	const assignee = claimOptions.assignee ?? "@me";
@@ -90,13 +101,14 @@ export type PrResult = { number: number | null; url: string; draft: boolean };
 export async function createPr(
 	exec: Exec,
 	options: PrCreateOptions & { cwd?: string },
+	signal?: AbortSignal,
 ): Promise<PrResult> {
 	const { cwd, ...prOptions } = options;
 	const dir = await mkdtemp(join(tmpdir(), "pi-gh-pr-"));
 	const bodyPath = join(dir, "body.md");
 	try {
 		await writeFile(bodyPath, prOptions.body, "utf8");
-		const stdout = await runGh(exec, buildPrCreateArgs({ ...prOptions, bodyPath }), "gh pr create", cwd);
+		const stdout = await runGh(exec, buildPrCreateArgs({ ...prOptions, bodyPath }), "gh pr create", cwd, signal);
 
 		const url = parsePrUrl(stdout);
 		if (!url) {
@@ -105,7 +117,7 @@ export async function createPr(
 
 		let number: number | null = null;
 		try {
-			const viewed = await runGh(exec, ["pr", "view", url, "--json", "number"], "gh pr view", cwd);
+			const viewed = await runGh(exec, ["pr", "view", url, "--json", "number"], "gh pr view", cwd, signal);
 			number = (JSON.parse(viewed) as { number: number }).number;
 		} catch {
 			// The PR exists. Losing its number is not worth failing the call.

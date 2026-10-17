@@ -14,7 +14,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { registerToolsWhenFree } from "../lib/defer-tools.ts";
+import { projectOwnsTool } from "../lib/project-tools.ts";
 
 interface Todo {
 	id: number;
@@ -133,9 +133,11 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => reconstructState(ctx));
 	pi.on("session_tree", async (_event, ctx) => reconstructState(ctx));
 
-	// Register the todo tool for the LLM. Deferred so a project that ships its own
-	// `todo` extension wins instead of crashing the session on a name conflict.
-	registerToolsWhenFree(pi, [{
+	// Stand down when the project ships its own todo extension. Registering a
+	// second one is a load-time conflict pi treats as fatal.
+	if (projectOwnsTool("todo", import.meta.dirname)) return;
+
+	pi.registerTool({
 		name: "todo",
 		label: "Todo",
 		description: "Manage a todo list. Actions: list, add (text), toggle (id), clear",
@@ -280,7 +282,7 @@ export default function (pi: ExtensionAPI) {
 					return new Text(theme.fg("success", "✓ ") + theme.fg("muted", "Cleared all todos"), 0, 0);
 			}
 		},
-	}]);
+	});
 
 	// Register the /todos command for users
 	pi.registerCommand("todos", {

@@ -30,7 +30,7 @@ import {
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
-import { registerToolsWhenFree } from "../../lib/defer-tools.ts";
+import { projectOwnsTool } from "../../lib/project-tools.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -468,7 +468,10 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
-	registerToolsWhenFree(pi, [{
+	// The project's own subagent extension wins, if it has one.
+	if (projectOwnsTool("subagent", import.meta.dirname)) return;
+
+	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",
 		description: [
@@ -1033,5 +1036,5 @@ export default function (pi: ExtensionAPI) {
 			const text = result.content[0];
 			return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
 		},
-	}]);
+	});
 }
