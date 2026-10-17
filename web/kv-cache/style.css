@@ -834,3 +834,29 @@ input[type="range"] {
     grid-column: 2;
   }
 }
+
+.a-link {
+  stroke: var(--rule);
+  stroke-width: 1;
+  opacity: .55;
+}
+
+.a-score {
+  fill: var(--weight);
+}
+
+.a-w {
+  fill: var(--k);
+}
+
+.a-fresh {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.idx {
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}

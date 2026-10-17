@@ -1,4 +1,4 @@
-export const MODELS = {
+const MODELS = {
   "llama2-7b": {
     label: "Llama-2-7B · MHA",
     layers: 32,
@@ -61,24 +61,24 @@ const TOKEN_MAX = 32768;
 const TOKEN_STEP = 128;
 const PAGE_FACTOR = 10;
 
-export function cacheBytes(key, tokens) {
+function cacheBytes(key, tokens) {
   const model = MODELS[key];
   if (!model) return 0;
   if (!Number.isFinite(tokens) || tokens <= 0) return 0;
   return model.perTokenBytes * Math.floor(tokens);
 }
 
-export function weightsBytes(key) {
+function weightsBytes(key) {
   return Object.hasOwn(KNOWN_WEIGHTS, key) ? KNOWN_WEIGHTS[key] : null;
 }
 
-export function stepReadBytes(key, tokens) {
+function stepReadBytes(key, tokens) {
   const weights = weightsBytes(key);
   if (weights === null) return null;
   return cacheBytes(key, tokens) + weights;
 }
 
-export function tokPerSec(key, tokens, bandwidthGBs) {
+function tokPerSec(key, tokens, bandwidthGBs) {
   const bytes = stepReadBytes(key, tokens);
   if (bytes === null || !(bytes > 0)) return null;
   if (!(bandwidthGBs > 0)) return null;
@@ -90,7 +90,7 @@ function trim(value) {
   return fixed.endsWith(".") ? fixed.slice(0, -1) : fixed;
 }
 
-export function formatBytes(bytes) {
+function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return { value: "0", unit: "B" };
   if (bytes >= GIB) return { value: (bytes / GIB).toFixed(2), unit: "GiB" };
   if (bytes >= MIB) return { value: trim(bytes / MIB), unit: "MiB" };
@@ -307,6 +307,21 @@ function mount(doc) {
   updateScrollState();
 }
 
-if (typeof document !== "undefined") {
+function wire() {
   mount(document);
 }
+
+const KV = { MODELS, cacheBytes, weightsBytes, stepReadBytes, tokPerSec, formatBytes, join };
+
+if (typeof module !== "undefined" && module.exports) {
+  exports.MODELS = MODELS;
+  exports.cacheBytes = cacheBytes;
+  exports.weightsBytes = weightsBytes;
+  exports.stepReadBytes = stepReadBytes;
+  exports.tokPerSec = tokPerSec;
+  exports.formatBytes = formatBytes;
+  exports.join = join;
+  module.exports = KV;
+}
+globalThis.KV = KV;
+if (typeof document !== "undefined") wire();

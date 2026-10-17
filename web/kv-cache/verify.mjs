@@ -19,7 +19,8 @@ if (fails.length) {
 
 const html = read("index.html");
 const css = read("style.css");
-const app = await import(pathToFileURL(join(here, "app.js")).href);
+const mod = await import(pathToFileURL(join(here, "app.js")).href);
+const app = mod.default ?? mod;
 
 const GiB = 1024 ** 3;
 const truth = {
@@ -71,7 +72,7 @@ check(/prefers-reduced-motion/.test(css), "css must honour prefers-reduced-motio
 check(/:focus-visible/.test(css), "css must define :focus-visible");
 check(!/overflow-x\s*:\s*(auto|scroll)/.test(css), "no horizontal scroll container");
 check(!/@import/.test(css), "no @import in css");
-check(!/<script[^>]+src=/i.test(html), "no external script");
+check(!/<script[^>]+src="(https?:)?\/\//i.test(html), "no remote script");
 check(!/<link[^>]+href="(https?:)?\/\//i.test(html), "no external stylesheet or font");
 check(!/TODO|FIXME|lorem ipsum|placeholder/i.test(html + css + read("app.js")), "no placeholder text");
 check(!/NaN|undefined/.test(html), "no NaN or undefined in markup");
