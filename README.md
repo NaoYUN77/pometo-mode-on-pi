@@ -21,8 +21,27 @@ scripts/check.sh             doctor plus every verify.mjs in tree
 ```bash
 pi                 # first time in this folder
 /trust             # saves the decision for this folder and below, stops the prompts
+```
+
+Then either route directly, the way pstack's own README shows:
+
+```
+/how do we cancel runs?
+/arena this module boundary
+/interrogate review this pr
+```
+
+or enter the rigorous mode when the work deserves it:
+
+```
 /poteto-mode <task>
 ```
+
+The bare names come from `.pi/extensions/skill-routes.ts`, which rewrites `/how`
+into the `how` skill's body before the message reaches the agent. It rebuilds the
+list from `.agents/skills/` on every load, so it never drifts from what is
+installed. `/routes` lists what it answers. `/skill:how` still works, and pi's own
+commands and `/poteto-mode` keep their names.
 
 Then steer short. `continue`. `只做第一步，停下等我`. `新任务：…`.
 

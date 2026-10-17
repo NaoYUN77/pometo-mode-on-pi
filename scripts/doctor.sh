@@ -62,12 +62,13 @@ fi
 # 5. The subagent tool, and the command that starts a run.
 missing=""
 [ -f .pi/extensions/subagent/index.ts ] || missing="$missing subagent-extension"
+[ -f .pi/extensions/skill-routes.ts ] || missing="$missing skill-routes"
 [ -f .pi/prompts/poteto-mode.md ] || missing="$missing poteto-mode-prompt"
 [ -f .agents/harness/pi.md ] || missing="$missing harness-adapter"
 if [ -n "$missing" ]; then
   bad "5 wiring: missing$missing"
 else
-  pass "5 wiring: subagent extension, /poteto-mode prompt, harness adapter"
+  pass "5 wiring: subagent extension, skill routes, /poteto-mode prompt, harness adapter"
 fi
 
 echo
