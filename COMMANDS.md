@@ -8,7 +8,7 @@
 - **想指定打法用 playbook**，比如 `/bug-fix`，你选剧本，它守纪律。
 - **想让它自己判断用 `/poteto-mode`**，它匹配剧本。
 
-全部是裸命令，选择权在你。`/routes` 会打印这次会话实际答应了哪些名字。
+全部是裸命令，选择权在你。`/routes` 按类型列出 23 个 playbook 和每个的中文说明。
 
 ---
 
@@ -174,7 +174,7 @@
 | 输出 | `/copy` `/export` `/share` `/bug` |
 | 系统 | `/settings` `/trust` `/reload` `/hotkeys` `/changelog` `/quit` |
 
-还有两个本地命令：`/routes` 列路由，`/todos` 看 `/poteto-mode` 开的那张清单。
+还有两个本地命令：`/routes` 列路由（playbook 按类型分组、带一句话说明），`/todos` 看 `/poteto-mode` 开的那张清单。
 
 `/reload` 在改了 `.pi/` 里的东西之后用。`/trust` 每个目录一次，向下继承。
 
@@ -198,7 +198,7 @@ playbook          /bug-fix /pause-safely…  23 个        ← 第四层
 ## 十一半、测这套命令本身
 
 ```bash
-node scripts/test-routes.mjs   # 19 项，零模型调用，一秒出结果
+node scripts/test-routes.mjs   # 28 项，零模型调用，一秒出结果
 bash scripts/check.sh          # doctor + 路由测试 + 所有 verify.mjs
 ```
 
@@ -207,6 +207,7 @@ bash scripts/check.sh          # doctor + 路由测试 + 所有 verify.mjs
 - `/how x` 注入的是 how 的技能正文，且保留你的问题
 - `/bug-fix x` 注入 router + bug-fix 步骤 + "already chosen" 标记
 - `/poteto-mode` `/model` `/compact` `/routes` 和未知名字**不被改写**（前面的层赢）
+- `/routes` 列出每一个 playbook、每一类分组、每一句说明；表和数据目录不一致就红
 - 扩展自己发的消息不会被二次改写
 
 不花钱，也不需要模型在跑。改完 `.pi/extensions/skill-routes.ts` 就跑它。

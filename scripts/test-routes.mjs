@@ -11,6 +11,8 @@
  * Exit code is non-zero on any failed case.
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -20,11 +22,22 @@ process.chdir(root);
 const extension = (await import(pathToFileURL(path.join(root, ".pi", "extensions", "skill-routes.ts")).href)).default;
 
 const handlers = [];
+const commands = new Map();
+const renderers = new Map();
+const entries = [];
 const pi = {
 	on(event, fn) {
 		handlers.push({ event, fn });
 	},
-	registerCommand() {},
+	registerCommand(name, options) {
+		commands.set(name, options);
+	},
+	registerEntryRenderer(type, factory) {
+		renderers.set(type, factory);
+	},
+	appendEntry(type, data) {
+		entries.push({ type, data });
+	},
 	getCommands() {
 		return [];
 	},
@@ -89,6 +102,133 @@ for (const [text, why] of [
 // Messages the extension injected itself are never rewritten again.
 const echo = await run("/how x", "extension");
 check("extension-sourced input is not rewritten", echo.action === "continue", echo.action);
+
+// `/routes` groups every playbook and explains each one, and the tables match
+// the directory, so a new playbook cannot land unexplained.
+// `/routes` has two output paths. The TUI gets a transcript entry, because a notify
+// collapses when sent back to back. Print, json, and rpc modes get stderr, because
+// pi takes stdout over there (`core/output-guard.js`) and only assistant messages
+// are rendered. Both are checked; a regression in either is the bug that shipped.
+const routes = commands.get("routes");
+check("/routes is registered", Boolean(routes));
+
+const notices = [];
+await routes.handler("", { mode: "tui", hasUI: true, ui: { notify: (m) => notices.push(m) } });
+
+const listing = entries.filter((e) => e.type === "routes-listing").at(-1)?.data?.text ?? "";
+check("/routes appends a transcript entry in the TUI", listing.length > 0, `${entries.length} entries`);
+check("/routes registers a renderer for it", renderers.has("routes-listing"));
+check("/routes sends at most one notify", notices.length <= 1, `${notices.length} notices`);
+
+const drawn = renderers
+	.get("routes-listing")({ data: { text: listing } }, { expanded: true }, { fg: (_c, s) => s })
+	.render(120)
+	.join("\n");
+check("/routes renderer draws the listing", drawn.includes("/bug-fix") && drawn.includes("/hillclimb"));
+
+// Print mode: no entry is readable there, so the listing must reach stderr.
+const stderrWrite = process.stderr.write;
+let printed = "";
+process.stderr.write = (chunk) => {
+	printed += String(chunk);
+	return true;
+};
+try {
+	await routes.handler("", { mode: "print", hasUI: false, ui: { notify() {} } });
+} finally {
+	process.stderr.write = stderrWrite;
+}
+check("/routes writes to stderr outside the TUI", printed.includes("/bug-fix"), `${printed.length} chars`);
+
+const dir = path.join(root, ".agents", "skills", "poteto-mode", "playbooks");
+const onDisk = fs
+	.readdirSync(dir)
+	.filter((f) => f.endsWith(".md"))
+	.map((f) => f.replace(/\.md$/, ""))
+	.sort();
+
+const routed = onDisk.filter((name) => listing.includes(`  /${name} `));
+check(
+	"/routes lists every playbook",
+	routed.length === onDisk.length,
+	`${routed.length}/${onDisk.length} listed: missing ${onDisk.filter((n) => !routed.includes(n)).join(", ") || "none"}`,
+);
+
+const unexplained = onDisk.filter((name) => {
+	const line = listing.split("\n").find((l) => l.startsWith(`  /${name} `));
+	return !line || line.slice(line.indexOf(`/${name}`) + name.length + 1).trim() === "";
+});
+check(
+	"every playbook has a note",
+	unexplained.length === 0,
+	`unexplained: ${unexplained.join(", ") || "none"}`,
+);
+
+for (const group of ["写代码", "查问题", "设计与原型", "交付", "长时间跑", "维护自己的状态"]) {
+	check(`/routes groups: ${group}`, listing.includes(group));
+}
+
+// A subdirectory session still resolves the tree.
+const nested = path.join(root, "web");
+if (fs.existsSync(nested)) {
+	process.chdir(nested);
+	const fromSubdir = (await import(`${pathToFileURL(path.join(root, ".pi", "extensions", "skill-routes.ts")).href}?subdir`)).default;
+	const subCommands = new Map();
+	const subEntries = [];
+	fromSubdir({
+		on() {},
+		registerCommand(name, options) {
+			subCommands.set(name, options);
+		},
+		registerEntryRenderer() {},
+		appendEntry(type, data) {
+			subEntries.push({ type, data });
+		},
+		getCommands() {
+			return [];
+		},
+	});
+	await subCommands.get("routes").handler("", { mode: "tui", hasUI: false, ui: { notify() {} } });
+	process.chdir(root);
+	const text = subEntries.at(-1)?.data?.text ?? "";
+	check(
+		"/routes works from a subdirectory",
+		text.includes("  /bug-fix "),
+		`entries: ${subEntries.length}, head: ${text.split("\n")[0]}`,
+	);
+}
+
+// A foreign directory still finds the tree beside the installed extension. The
+// trap is `~/.agents/skills`, which holds unrelated user skills and would stop a
+// plain `.agents/skills` walk before it ever reached the package. Only the router
+// marks a real tree.
+if (fs.existsSync(path.join(os.homedir(), ".agents", "skills"))) {
+	process.chdir(os.tmpdir());
+	const fromPackage = (await import(`${pathToFileURL(path.join(root, ".pi", "extensions", "skill-routes.ts")).href}?pkg`)).default;
+	const pkgCommands = new Map();
+	const pkgEntries = [];
+	fromPackage({
+		on() {},
+		registerCommand(name, options) {
+			pkgCommands.set(name, options);
+		},
+		registerEntryRenderer() {},
+		appendEntry(type, data) {
+			pkgEntries.push({ type, data });
+		},
+		getCommands() {
+			return [];
+		},
+	});
+	await pkgCommands.get("routes").handler("", { mode: "tui", hasUI: false, ui: { notify() {} } });
+	process.chdir(root);
+	const text = pkgEntries.at(-1)?.data?.text ?? "";
+	check(
+		"/routes ignores ~/.agents/skills and finds the package tree",
+		text.includes("  /bug-fix "),
+		`entries: ${pkgEntries.length}, head: ${text.split("\n")[0]}`,
+	);
+}
 
 console.log();
 if (failed > 0) {
