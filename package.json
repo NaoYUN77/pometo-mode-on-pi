@@ -1,0 +1,43 @@
+{
+  "name": "pometo-mode-on-pi",
+  "version": "0.1.0",
+  "description": "pstack's working mode on pi: 23 playbooks, 55 skills, bare /how /bug-fix routes, subagent seats",
+  "keywords": [
+    "pi-package",
+    "pstack",
+    "poteto-mode",
+    "agent-workflow",
+    "playbooks"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NaoYUN77/pometo-mode-on-pi.git"
+  },
+  "homepage": "https://github.com/NaoYUN77/pometo-mode-on-pi#readme",
+  "pi": {
+    "extensions": [
+      "./.pi/extensions/skill-routes.ts",
+      "./.pi/extensions/todo.ts",
+      "./.pi/extensions/bash-guard.ts",
+      "./.pi/extensions/gh",
+      "./.pi/extensions/subagent"
+    ],
+    "skills": [
+      "./.agents/skills"
+    ],
+    "prompts": [
+      "./.pi/prompts/*.md"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "scripts": {
+    "test": "node scripts/test-routes.mjs && node scripts/test-bash-guard.mjs && node scripts/verify-gh-tool.mjs"
+  }
+}
