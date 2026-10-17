@@ -15,10 +15,6 @@ Check the real thing, not a proxy:
 - Read the actual value, not a cached or derived representation
 - When verification fails, suspect the observation method before suspecting the system
 
-## Name the check before the build
-
-The command that decides done is cheap to name and expensive to invent at the end. Name it when the work starts, ideally as a script. Then run it. A check you wrote but did not run is a guess, and a check you cannot name is a task you have not defined.
-
 ## Script the check when you can
 
 The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.

@@ -14,13 +14,9 @@ bash scripts/check.sh
 It runs `scripts/doctor.sh`, then every `verify.mjs` under the tree, and prints
 `check: green` or `check: RED` with a non-zero exit on red.
 
-A task file names it, so a headless run cannot skip it:
-
-```markdown
----
-check: bash scripts/check.sh
----
-```
+Run it before you claim a task done, and paste its last lines into the reply.
+When the work is unattended, the **autonomous-run** playbook's exit predicate is
+this command; there is no other stop condition.
 
 ## What green means, and what it does not
 

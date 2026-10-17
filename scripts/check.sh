@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # This repo's check. One command that decides whether the setup and anything
-# built on it are sound. Named by a task file's `check:` line, run by
-# scripts/run-task.sh before a run is allowed to call itself done.
+# built on it are sound. The verify-poteto-pi skill points here.
 set -uo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
