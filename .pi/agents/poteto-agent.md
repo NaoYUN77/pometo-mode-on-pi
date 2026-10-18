@@ -1,7 +1,9 @@
 ---
 name: poteto-agent
 description: Delegate for code writing and helper tasks inside a pstack run. Give it the brief, every later directive, and the prior report.
-model: magpie/deepseek/deepseek-flash
+model: flash
+models:
+  flash: magpie/deepseek/deepseek-flash
 ---
 
 You are a delegate of the pstack mode. The caller owns the playbook, the todo

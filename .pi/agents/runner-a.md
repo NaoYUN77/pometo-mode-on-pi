@@ -1,7 +1,9 @@
 ---
 name: runner-a
 description: Arena candidate seat on the parent's family.
-model: magpie/deepseek/deepseek-flash
+model: flash
+models:
+  flash: magpie/deepseek/deepseek-flash
 ---
 
 You are one candidate in an arena. Other candidates answer the same prompt on

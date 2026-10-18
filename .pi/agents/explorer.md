@@ -1,7 +1,9 @@
 ---
 name: explorer
 description: Read-only codebase recon. Returns compressed, cited findings for an agent that has not seen the files.
-model: magpie/deepseek/deepseek-flash
+model: flash
+models:
+  flash: magpie/deepseek/deepseek-flash
 tools: read, grep, find, ls, bash
 ---
 

@@ -300,9 +300,26 @@ async function runSingleAgent(
 		};
 	}
 
+	// A short name the seat's own `models:` block does not define is a broken seat,
+	// not a model pi would reject with a message the caller could act on.
+	if (agent.model && !agent.modelId) {
+		const known = Object.keys(agent.models).join(", ") || "none";
+		return {
+			agent: agentName,
+			agentSource: agent.source,
+			task,
+			exitCode: 1,
+			messages: [],
+			stderr: `Seat "${agent.name}" names model "${agent.model}", which its models: block does not define. Defined: ${known}. Write a provider/id instead, or add the name to models:.`,
+			usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
+			model: agent.model,
+			step,
+		};
+	}
+
 	const args: string[] = ["--mode", "json", "-p", "--no-session"];
-	const inheritsDispatchConfig = !agent.model;
-	const model = agent.model ?? dispatchDefaults.model;
+	const inheritsDispatchConfig = !agent.modelId;
+	const model = agent.modelId ?? dispatchDefaults.model;
 	if (model) args.push("--model", model);
 	if (inheritsDispatchConfig && dispatchDefaults.thinkingLevel) {
 		args.push("--thinking", dispatchDefaults.thinkingLevel);
@@ -529,8 +546,8 @@ function launchBackground(
 		cwd,
 		sessionId: randomUUID(),
 		sessionDir: dir,
-		model: agent.model ?? dispatchDefaults.model,
-		thinking: agent.model ? undefined : dispatchDefaults.thinkingLevel,
+		model: agent.modelId ?? dispatchDefaults.model,
+		thinking: agent.modelId ? undefined : dispatchDefaults.thinkingLevel,
 		systemPromptFile,
 		toolList: agent.tools,
 		prompt: task,
@@ -882,6 +899,18 @@ export function install(pi: ExtensionAPI, options: SubagentOptions = {}): void {
 							{
 								type: "text",
 								text: `Unknown agent: "${params.agent}". Available agents: ${agents.map((a) => a.name).join(", ") || "none"}.`,
+							},
+						],
+						isError: true,
+						details: makeDetails("single")([]),
+					};
+				}
+				if (agent.model && !agent.modelId) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Seat "${agent.name}" names model "${agent.model}", which its models: block does not define. Defined: ${Object.keys(agent.models).join(", ") || "none"}. Write a provider/id instead, or add the name to models:.`,
 							},
 						],
 						isError: true,

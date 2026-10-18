@@ -46,7 +46,19 @@ pi takes any `provider/model` the catalog serves, resolved through
 `pi --list-models`. There is no four-slot ceiling and no alias layer here, so the
 role table in `.agents/pstack-models.md` is honoured literally.
 
-Give each agent file one exact id, for example `model: magpie/codex/gpt-6-luna`.
+Give each agent file one exact id, for example `model: magpie/codex/gpt-6-luna`,
+or a short name from the table above, defined in the same file:
+
+```yaml
+model: gpt
+models:
+  gpt: magpie/codex/gpt-6-luna
+```
+
+The short name is matched case-insensitively and the id it stands for is what
+reaches pi. A name the `models:` block does not define is refused before pi
+starts, and the error lists the names the block does define.
+
 Check the id against `pi --list-models` before trusting it; a wrong id fails the
 subagent process instead of silently inheriting, which is the failure mode worth
 having.

@@ -1,9 +1,14 @@
 # pstack role map — pi
 
 One line per role. pi takes any `provider/model` the catalog serves, so a role
-names the model it wants, in full. Check an id against `pi --list-models` before
-writing it anywhere; a wrong id fails the subagent process rather than silently
-inheriting, which is the failure worth having.
+names the model it wants. Check an id against `pi --list-models` before writing it
+anywhere; a wrong id fails the subagent process rather than silently inheriting,
+which is the failure worth having.
+
+A seat file may write the id in full (`model: magpie/codex/gpt-6-luna`) or the
+short name from the table below, with that name defined in its own `models:`
+block. Either way the id is what reaches pi; a short name the block does not
+define is refused before pi starts.
 
 The parent runs `workbuddy-ai/deepseek-v4.1-flash` by default. A cross-judge must
 not share the parent's family, so every panel below avoids DeepSeek for its judge.
@@ -51,15 +56,15 @@ review: gpt
 
 ## Seats
 
-| agent file | model | notes |
-| --- | --- | --- |
-| `poteto-agent` | flash | the general delegate |
-| `explorer` | flash | read-only recon |
-| `reviewer` | gpt | read-only review |
-| `judge` | glm | read-only cross-judge |
-| `runner-a` | flash | arena seat on the parent's family |
-| `runner-b` | glm | arena seat on a second family |
-| `runner-c` | gpt | arena seat on a third family |
+| agent file | model | short name defined in the file | notes |
+| --- | --- | --- | --- |
+| `poteto-agent` | `magpie/deepseek/deepseek-flash` | `flash` | the general delegate |
+| `explorer` | `magpie/deepseek/deepseek-flash` | `flash` | read-only recon |
+| `reviewer` | `magpie/codex/gpt-6-luna` | `gpt` | read-only review |
+| `judge` | `magpie/opencode-zen/glm-5.3-flash-free` | `glm` | read-only cross-judge |
+| `runner-a` | `magpie/deepseek/deepseek-flash` | `flash` | arena seat on the parent's family |
+| `runner-b` | `magpie/opencode-zen/glm-5.3-flash-free` | `glm` | arena seat on a second family |
+| `runner-c` | `magpie/codex/gpt-6-luna` | `gpt` | arena seat on a third family |
 
 ## Why the panel is shaped this way
 
