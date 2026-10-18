@@ -7,7 +7,7 @@
  *   Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
  *
  * That kills the session before any output. A project that vendored `todo.ts`,
- * `subagent/`, or the gh tools and then installed this package hit exactly that.
+ * `subagent/` and then installed this package hit exactly that.
  *
  * Registering later, from `session_start`, is not a fix. `registerTool` calls
  * `refreshTools()`, which rebuilds the tool registry mid-session and leaves every
@@ -40,9 +40,6 @@ function findProjectRoot(start: string): string {
 const OWNED_BY: Record<string, string[]> = {
 	todo: ["todo.ts", "todo.js", "todo/index.ts", "todo/index.js"],
 	subagent: ["subagent/index.ts", "subagent/index.js", "subagent.ts", "subagent.js"],
-	gh_issue_list: ["gh/index.ts", "gh/index.js", "gh.ts", "gh.js"],
-	gh_issue_claim: ["gh/index.ts", "gh/index.js", "gh.ts", "gh.js"],
-	gh_pr_create: ["gh/index.ts", "gh/index.js", "gh.ts", "gh.js"],
 };
 
 /**

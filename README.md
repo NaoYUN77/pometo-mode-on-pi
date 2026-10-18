@@ -38,7 +38,7 @@ bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 
 ### 项目里已经有同名扩展时
 
-项目如果自己带了 `todo.ts`、`subagent/` 或 gh 工具，注册的工具名跟这个包一样。
+项目如果自己带了 `todo.ts` 或 `subagent/`，注册的工具名跟这个包一样。
 pi 把这当加载期冲突，直接退出，stdout 一个字节都没有：
 
 ```
@@ -54,7 +54,7 @@ Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
 
 ### If your project already ships these extensions
 
-A project that vendored `todo.ts`, `subagent/`, or the gh tools registers the same
+A project that vendored `todo.ts` or `subagent/` registers the same
 tool names this package does. pi treats that as a load-time conflict and exits
 with nothing on stdout:
 
@@ -83,18 +83,18 @@ so `read` and `bash` fail with `Cannot read properties of undefined`. Version
   interrogate/            32K   74 lines + rubric and reviewer prompt
   principle-*/            81K   24 rules, 434 lines total
   (24 more skills)        ~150K
-.agents/harness/pi.md      8K   104 lines: Cursor to pi mapping
+.agents/harness/pi.md      8K   132 lines: Cursor to pi mapping
 .agents/pstack-models.md   8K   91 lines: role to model table
+docs/pi-equivalence.md     8K   34 rows: each CC mechanism, its provider here, its proof
 .pi/extensions/          104K
-  subagent/index.ts     1040 lines
+  subagent/index.ts     1358 lines
   skill-routes.ts        340 lines
   todo.ts                301 lines
   bash-guard.ts          148 lines
-  gh/                    177 + 130 + 178 lines
-  lib/project-tools.ts    64 lines
+  lib/                   460 lines: project-tools, truncate, line-splitter, kill, pi-child
 .pi/agents/               23K   7 seat files, 16 to 28 lines each
 .pi/prompts/               4K   /poteto-mode template
-scripts/                  40K   doctor, check, 4 zero-token test suites
+scripts/                 124K  doctor, check, 10 zero-token test suites, 2 test doubles
 ```
 
 ### Three layers
@@ -197,12 +197,19 @@ bash scripts/check.sh
 ```
 
 Doctor, then every test that spends no tokens: the routing surface (35 checks,
-covering both `/routes` output paths), the bash guard (22), the GitHub tool's pure
-half. Prints `check: green` or `check: RED`.
+covering both `/routes` output paths), the bash guard (24), the subagent's output
+handling (28: the 50 KB cap never splits a character, and stdout split
+mid-character still decodes whole), the seat files (39), the kill escalation
+(11), the child protocol (20: a steer that arrives after the settle is reported
+as not delivered), the background path end to end (31, against a fake pi), the tool-name conflict
+guard (16), the equivalence table (113: every claim names a file that exists), and
+the README's numbers (20).
+Prints `check: green` or `check: RED`.
 
 ### Differences from pstack
 
-Named because they change behaviour.
+Named because they change behaviour. `docs/pi-equivalence.md` carries the full
+row-by-row table, including what is missing and why no workflow needs it.
 
 - **Playbooks are bare commands.** In Cursor only `/poteto-mode` picks one. Here
   all 23 are registered, and the route injects the router alongside the steps.
@@ -210,6 +217,11 @@ Named because they change behaviour.
   `/how`, `/arena`, and the rest, and leaves `/skill:how` working.
 - **No always-on mode block.** `/poteto-mode` is entered, not resident. An
   always-on router would tell a one-line question to match a playbook.
+- **Two child modes.** A foreground call is a one-shot `pi --mode json -p` and
+  waits for its report. `run_in_background: true` starts a `pi --mode rpc` child
+  with its own session, so `send_message` can steer it while it runs; the prompt
+  travels on stdin, not argv. A run that already settled cannot be resumed, only
+  replaced.
 - **Seats are per-project.** pi packages cannot ship `agents/`.
 - **`/routes` instead of a marketplace.** Nothing is copied; the list is rebuilt
   from the tree on every load.
@@ -266,18 +278,18 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
   interrogate/            32K   74 行 + 评分表和审阅者提示词
   principle-*/            81K   24 条规则，共 434 行
   （其余 24 个 skill）    ~150K
-.agents/harness/pi.md      8K   104 行：Cursor 到 pi 的映射
+.agents/harness/pi.md      8K   132 行：Cursor 到 pi 的映射
 .agents/pstack-models.md   8K   91 行：角色到模型表
+docs/pi-equivalence.md     8K   34 行：每条 CC 机制、它在 pi 上由谁提供、证据
 .pi/extensions/          104K
-  subagent/index.ts     1040 行
+  subagent/index.ts     1358 行
   skill-routes.ts        340 行
   todo.ts                301 行
   bash-guard.ts          148 行
-  gh/                    177 + 130 + 178 行
-  lib/project-tools.ts    64 行
+  lib/                   460 行：project-tools、truncate、line-splitter、kill、pi-child
 .pi/agents/               23K   7 个档位文件，每个 16 到 28 行
 .pi/prompts/               4K   /poteto-mode 模板
-scripts/                  40K   doctor、check、3 个不花钱的测试
+scripts/                 124K  doctor、check、10 个不花钱的测试、2 个测试替身
 ```
 
 ### 三层结构
@@ -377,12 +389,17 @@ bash scripts/check.sh
 ```
 
 跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
-输出路径）、bash 守卫（22 项）、GitHub 工具里不碰网络的那一半、README 里的每个数字，
-以及工具名冲突。打印 `check: green` 或 `check: RED`。
+输出路径）、bash 守卫（24 项）、subagent 的输出处理（28 项：50 KB 截断不切开字符，
+stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、SIGKILL 兜底
+（11 项）、子进程协议（20 项：settle 之后才到的 steer 会报「没送进去」）、后台链路端到端
+（31 项，对着一个假 pi）、工具名冲突（16 项）、等价表（113 项：每条声明都得指向一个
+真实存在的文件）、README 里的每个数字（20 项）。打印
+`check: green` 或 `check: RED`。
 
 ### 与 pstack 的差异
 
-列出来是因为它们改变行为。
+列出来是因为它们改变行为。完整的逐条对照在 `docs/pi-equivalence.md`，包括缺了什么、
+以及为什么没有哪条工作流需要它。
 
 - **playbook 也能直接敲。** Cursor 上只有 `/poteto-mode` 会选一个。这里 23 个全部
   注册好了，路由会把 router 连同步骤一起注入。
@@ -390,6 +407,10 @@ bash scripts/check.sh
   `/arena` 等，`/skill:how` 依然可用。
 - **没有常驻的模式块。** `/poteto-mode` 是进去的，不是一直挂着的。一直挂着的路由会
   让一句单行提问也去匹配 playbook。
+- **子进程有两种模式。** 前台调用是 `--mode json -p` 的一次性进程，等它交报告。
+  `run_in_background: true` 起的是带独立会话的 `--mode rpc` 子进程，所以
+  `send_message` 能在它跑的时候插手；提示词走 stdin，不走 argv。已经结束的 run 不能续跑，
+  只能重开一个。
 - **档位按项目放。** pi 包带不了 `agents/`。
 - **用 `/routes` 代替插件市场。** 没有拷贝，列表每次加载从目录重建。
 

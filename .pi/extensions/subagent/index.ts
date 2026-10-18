@@ -12,30 +12,36 @@
  * Uses JSON mode to capture structured output from subagents.
  */
 
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import type { AgentToolResult, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
 import { StringEnum } from "@earendil-works/pi-ai";
 import {
 	CONFIG_DIR_NAME,
 	type ExtensionAPI,
+	type ExtensionContext,
 	formatReadLineRange,
-	getAgentDir,
 	getMarkdownTheme,
 	withFileMutationQueue,
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
+import { lineSplitter } from "../../lib/line-splitter.ts";
+import { KILL_GRACE_MS, terminate } from "../../lib/kill.ts";
+import { PiChild } from "../../lib/pi-child.ts";
 import { projectOwnsTool } from "../../lib/project-tools.ts";
+import { OUTPUT_CAP_BYTES, truncateUtf8, truncationNotice } from "../../lib/truncate.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
-const PER_TASK_OUTPUT_CAP = 50 * 1024;
+const PER_TASK_OUTPUT_CAP = OUTPUT_CAP_BYTES;
 
 function formatTokens(count: number): string {
 	if (count < 1000) return count.toString();
@@ -193,11 +199,8 @@ function truncateParallelOutput(output: string): string {
 	const byteLength = Buffer.byteLength(output, "utf8");
 	if (byteLength <= PER_TASK_OUTPUT_CAP) return output;
 
-	let truncated = output.slice(0, PER_TASK_OUTPUT_CAP);
-	while (Buffer.byteLength(truncated, "utf8") > PER_TASK_OUTPUT_CAP) {
-		truncated = truncated.slice(0, -1);
-	}
-	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. Full output preserved in tool details.]`;
+	const truncated = truncateUtf8(output, PER_TASK_OUTPUT_CAP);
+	return `${truncated}\n\n${truncationNotice(byteLength - Buffer.byteLength(truncated, "utf8"), undefined)}`;
 }
 
 type DisplayItem = { type: "text"; text: string } | { type: "toolCall"; name: string; args: Record<string, any> };
@@ -279,6 +282,7 @@ async function runSingleAgent(
 	signal: AbortSignal | undefined,
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
+	invocationOverride?: { command: string; args: string[] },
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 
@@ -341,13 +345,17 @@ async function runSingleAgent(
 		let wasAborted = false;
 
 		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
+			// An override supplies how to start pi (a stand-in for tests); the flags this
+			// call builds still have to ride along, or the child would be started with
+			// none of them.
+			const invocation = invocationOverride
+				? { command: invocationOverride.command, args: [...invocationOverride.args, ...args] }
+				: getPiInvocation(args);
 			const proc = spawn(invocation.command, invocation.args, {
 				cwd: cwd ?? defaultCwd,
 				shell: false,
 				stdio: ["ignore", "pipe", "pipe"],
 			});
-			let buffer = "";
 
 			const processLine = (line: string) => {
 				if (!line.trim()) return;
@@ -386,19 +394,17 @@ async function runSingleAgent(
 				}
 			};
 
-			proc.stdout.on("data", (data) => {
-				buffer += data.toString();
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-				for (const line of lines) processLine(line);
-			});
+			const stdout = lineSplitter(processLine);
+			proc.stdout.on("data", (data) => stdout.write(data));
 
+			const stderrDecoder = new StringDecoder("utf8");
 			proc.stderr.on("data", (data) => {
-				currentResult.stderr += data.toString();
+				currentResult.stderr += stderrDecoder.write(data);
 			});
 
 			proc.on("close", (code) => {
-				if (buffer.trim()) processLine(buffer);
+				stdout.end();
+				currentResult.stderr += stderrDecoder.end();
 				resolve(code ?? 0);
 			});
 
@@ -409,10 +415,7 @@ async function runSingleAgent(
 			if (signal) {
 				const killProc = () => {
 					wasAborted = true;
-					proc.kill("SIGTERM");
-					setTimeout(() => {
-						if (!proc.killed) proc.kill("SIGKILL");
-					}, 5000);
+					terminate(proc, KILL_GRACE_MS);
 				};
 				if (signal.aborted) killProc();
 				else signal.addEventListener("abort", killProc, { once: true });
@@ -465,11 +468,178 @@ const SubagentParams = Type.Object({
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: true.", default: true }),
 	),
 	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
+	run_in_background: Type.Optional(
+		Type.Boolean({
+			description:
+				"Single mode only. Return an agentId at once and keep the run alive, so send_message can steer it. A completion notice arrives as a message when it exits.",
+		}),
+	),
 });
 
-export default function (pi: ExtensionAPI) {
+const SendMessageParams = Type.Object(
+	{
+		to: Type.String({ description: "The agentId (or its description) returned by a background subagent call" }),
+		message: Type.String({ description: "What to tell the running agent" }),
+	},
+	{ additionalProperties: false },
+);
+
+/**
+ * Start a run that outlives this tool call.
+ *
+ * The child is `pi --mode rpc` with its own session id and directory, so it can
+ * be written to after the prompt: that is what steer needs. Its prompt goes in on
+ * stdin rather than argv, which also keeps a long brief from hitting an argument
+ * limit and stops a leading `@` being read as a file.
+ *
+ * The system prompt is written to a 0600 file and appended, so the child keeps
+ * pi's own skill list while gaining the seat's instructions. `--tools` is a full
+ * allowlist, so a read-only seat really is read-only, extension tools included.
+ */
+function launchBackground(
+	pi: ExtensionAPI,
+	registry: Map<string, BackgroundAgent>,
+	options: {
+		agent: AgentConfig;
+		task: string;
+		cwd: string;
+		ctx: ExtensionContext;
+		dispatchDefaults: DispatchDefaults;
+		piInvocation?: { command: string; args: string[] };
+	},
+): BackgroundAgent {
+	const { agent, task, cwd, ctx, dispatchDefaults } = options;
+	const id = `a${randomUUID().replaceAll("-", "").slice(0, 16)}`;
+	const parentSessionId = ctx.sessionManager.getSessionId();
+	const dir = agentStateDir(parentSessionId);
+	fs.mkdirSync(dir, { recursive: true });
+
+	let systemPromptFile: string | undefined;
+	if (agent.systemPrompt.trim()) {
+		const prompts = path.join(dir, "prompts");
+		fs.mkdirSync(prompts, { recursive: true });
+		systemPromptFile = path.join(prompts, `${id}.md`);
+		fs.writeFileSync(systemPromptFile, agent.systemPrompt, { mode: 0o600 });
+	}
+
+	const invocation = options.piInvocation ?? getPiInvocation([]);
+	const child = new PiChild({
+		command: invocation.command,
+		args: invocation.args,
+		cwd,
+		sessionId: randomUUID(),
+		sessionDir: dir,
+		model: agent.model ?? dispatchDefaults.model,
+		thinking: agent.model ? undefined : dispatchDefaults.thinkingLevel,
+		systemPromptFile,
+		toolList: agent.tools,
+		prompt: task,
+	});
+
+	const record: BackgroundAgent = {
+		id,
+		description: task.slice(0, 80),
+		agentName: agent.name,
+		child,
+		state: "running",
+		finalText: "",
+		startedAt: new Date().toISOString(),
+		transcript: undefined,
+	};
+	registry.set(id, record);
+
+	void child.exited.then((exit) => {
+		record.state = exit.settled ? "completed" : "failed";
+		record.finalText = exit.finalText || exit.errorMessage || exit.stderr || "(no output)";
+		// Pi names the child's transcript <timestamp>_<session id>.jsonl.
+		try {
+			const name = fs.readdirSync(dir).find((n) => n.endsWith(".jsonl"));
+			if (name) record.transcript = path.join(dir, name);
+		} catch {
+			// No transcript is not a failure worth reporting to the model.
+		}
+		// The model that called stop-adjacent paths already has the result; a
+		// notice starts a turn only when nobody is waiting for it.
+		void pi.sendMessage(
+			{
+				customType: AGENT_NOTICE_TYPE,
+				content: noticeOf(record),
+				display: true,
+				details: { agentId: record.id, status: record.state },
+			},
+			{ triggerTurn: true, deliverAs: "steer" },
+		);
+	});
+
+	return record;
+}
+
+/** Find a background agent by id, or by its description when that is unambiguous. */
+function findBackground(registry: Map<string, BackgroundAgent>, to: string): BackgroundAgent | undefined {
+	const byId = registry.get(to);
+	if (byId) return byId;
+	const matches = [...registry.values()].filter((a) => a.description === to);
+	return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** The notice a background agent posts when it ends. */
+const AGENT_NOTICE_TYPE = "pstack-agent";
+
+/**
+ * A background run. It is a rpc child, not a one-shot process, because steer
+ * needs something still listening after the prompt is sent.
+ */
+interface BackgroundAgent {
+	id: string;
+	description: string;
+	agentName: string;
+	child: PiChild;
+	state: "running" | "completed" | "failed";
+	finalText: string;
+	startedAt: string;
+	transcript: string | undefined;
+}
+
+/** Where a session's background runs keep their child session files. */
+function agentStateDir(parentSessionId: string): string {
+	const base = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
+	return path.join(base, "pstack", parentSessionId, "agents");
+}
+
+/** The report a notice carries: what ran, how it ended, and what it said. */
+function noticeOf(agent: BackgroundAgent): string {
+	const lines = [
+		`agentId: ${agent.id}`,
+		`description: ${agent.description}`,
+		`status: ${agent.state}`,
+	];
+	if (agent.transcript) lines.push(`transcript: ${agent.transcript}`);
+	return `${lines.join("\n")}\n\n${agent.finalText}`;
+}
+
+/**
+ * What can be swapped out. Only the child invocation is injectable, so a test can
+ * stand a script in for `pi` and exercise the background path without a model.
+ * Production passes nothing.
+ */
+export interface SubagentOptions {
+	/** How to start a child process. Defaults to re-running this pi. */
+	piInvocation?: { command: string; args: string[] };
+}
+
+export function install(pi: ExtensionAPI, options: SubagentOptions = {}): void {
 	// The project's own subagent extension wins, if it has one.
 	if (projectOwnsTool("subagent", import.meta.dirname)) return;
+
+	// Background runs, keyed by the id the model was handed. A run is only in this
+	// map while the session that started it is alive; nothing survives a reload.
+	const background = new Map<string, BackgroundAgent>();
+
+	pi.on("session_shutdown", async () => {
+		for (const agent of background.values()) {
+			if (agent.state === "running") agent.child.end(1000);
+		}
+	});
 
 	pi.registerTool({
 		name: "subagent",
@@ -583,6 +753,7 @@ export default function (pi: ExtensionAPI) {
 						signal,
 						chainUpdate,
 						makeDetails("chain"),
+						options.piInvocation,
 					);
 					results.push(result);
 
@@ -662,6 +833,7 @@ export default function (pi: ExtensionAPI) {
 							}
 						},
 						makeDetails("parallel"),
+						options.piInvocation,
 					);
 					allResults[index] = result;
 					emitParallelUpdate();
@@ -687,6 +859,54 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
+			if (params.agent && params.task && params.run_in_background) {
+				// A one-shot run exits the moment it settles, and shutting down ends every
+				// child. The caller would be told "you will be notified" and then never be.
+				// Refusing is the honest answer; a foreground call is the substitute.
+				if (ctx.mode === "print" || ctx.mode === "json") {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `run_in_background needs a session that outlives this turn, and this is a one-shot ${ctx.mode} run: the process exits when it settles, which ends the child before its notice can arrive. Use a foreground call instead, or run the task in an interactive session.`,
+							},
+						],
+						isError: true,
+						details: makeDetails("single")([]),
+					};
+				}
+				const agent = agents.find((a) => a.name === params.agent);
+				if (!agent) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Unknown agent: "${params.agent}". Available agents: ${agents.map((a) => a.name).join(", ") || "none"}.`,
+							},
+						],
+						isError: true,
+						details: makeDetails("single")([]),
+					};
+				}
+				const started = launchBackground(pi, background, {
+					agent,
+					task: params.task,
+					cwd: params.cwd ?? ctx.cwd,
+					ctx,
+					dispatchDefaults,
+					piInvocation: options.piInvocation,
+				});
+				return {
+					content: [
+						{
+							type: "text",
+							text: `${JSON.stringify({ agentId: started.id, status: "running" })}\n\nThe agent is working in the background. You will be notified when it finishes. Do not report or predict its result before that notice; continue other work. Use send_message to steer it while it runs.`,
+						},
+					],
+					details: makeDetails("single")([]),
+				};
+			}
+
 			if (params.agent && params.task) {
 				const result = await runSingleAgent(
 					ctx.cwd,
@@ -699,6 +919,7 @@ export default function (pi: ExtensionAPI) {
 					signal,
 					onUpdate,
 					makeDetails("single"),
+					options.piInvocation,
 				);
 				const isError = isFailedResult(result);
 				if (isError) {
@@ -1037,4 +1258,101 @@ export default function (pi: ExtensionAPI) {
 			return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
 		},
 	});
+
+	pi.registerTool({
+		name: "send_message",
+		label: "Send message",
+		description:
+			"Steer a background subagent started with run_in_background. It reads the message after its current tool calls and carries on in the same run, so one completion notice follows. A message to an agent that already finished is refused: its work is done and nothing is listening.",
+		parameters: SendMessageParams,
+		async execute(_toolCallId, params) {
+			const agent = findBackground(background, params.to);
+			if (!agent) {
+				const known = [...background.values()].map((a) => `${a.id} (${a.agentName})`);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `No background agent "${params.to}". Known agents: ${known.join(", ") || "none"}.`,
+						},
+					],
+					isError: true,
+					details: { agentId: null },
+				};
+			}
+
+			if (agent.state !== "running") {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Agent ${agent.id} already finished (${agent.state}), so it cannot be steered. Its result is in the completion notice. Start a new background agent if you need more work.\n\n${agent.finalText}`,
+						},
+					],
+					isError: true,
+					details: { agentId: agent.id, status: agent.state },
+				};
+			}
+
+			const { response, taken } = await agent.child.steer(params.message);
+			if (response && !response.success) {
+				return {
+					content: [{ type: "text", text: `Agent ${agent.id} did not take the message: ${response.error ?? "unknown reason"}` }],
+					isError: true,
+					details: { agentId: agent.id, status: agent.state },
+				};
+			}
+
+			// pi answers "queued" for a steer it will never read, because the run
+			// settled first. Saying "delivered" there would be a lie.
+			if (!taken) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Agent ${agent.id} settled before it could read the message, so it was not delivered. Its result arrives in the completion notice.`,
+						},
+					],
+					isError: true,
+					details: { agentId: agent.id, status: agent.state, taken: false },
+				};
+			}
+
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Agent ${agent.id} is running; it will read the message after its current tool calls and report once.`,
+					},
+				],
+				details: { agentId: agent.id, status: agent.state, taken: true },
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "list_agents",
+		label: "List agents",
+		description:
+			"List the background subagents this session started, with their status. running means the process is still alive. An agent stays listed after it finishes so its result can be read from the completion notice, not from here.",
+		parameters: Type.Object({}, { additionalProperties: false }),
+		async execute() {
+			const agents = [...background.values()].map((a) => ({
+				agentId: a.id,
+				agent: a.agentName,
+				description: a.description,
+				status: a.state,
+				startedAt: a.startedAt,
+				transcript: a.transcript,
+			}));
+			return {
+				content: [{ type: "text", text: JSON.stringify(agents, null, 2) }],
+				details: { agents },
+			};
+		},
+	});
+}
+
+export default function (pi: ExtensionAPI): void {
+	install(pi);
 }

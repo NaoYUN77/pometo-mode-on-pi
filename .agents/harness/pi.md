@@ -19,7 +19,9 @@ running any pstack skill. Where this file and a skill disagree, this file wins.
 ## Subagent modes
 
 pi's subagent tool takes three shapes, and they map onto Cursor's `Task` calls
-better than Claude Code does.
+better than Claude Code does. A single-mode call also takes `run_in_background`,
+which is what makes `send_message` usable: a foreground call occupies the turn, so
+there is nothing to steer it from.
 
 | Cursor | pi |
 | --- | --- |
@@ -28,7 +30,10 @@ better than Claude Code does.
 | a chained flow with `{previous}` | `{ chain: [{agent, task}, …] }` |
 | `readonly: true` | `agent: "explorer"` |
 | `environment: "cloud"`, own worktree | `cwd: "<path to a worktree you made>"`. pi has no isolation flag, so make the worktree yourself and pass its path |
-| `run_in_background` | pi's parallel mode is already concurrent and waits; omit it |
+| `run_in_background` | `run_in_background: true` on a single-mode call. Returns an `agentId` at once and posts a completion notice when the child exits. Refused in `print` and `json` mode, where the session ends at settle and would kill the child |
+| `SendMessage` | `send_message`, addressed by `agentId`. It steers a run that is still live; a run that already settled is refused, because the child exits when it does |
+| `ListAgents` | `list_agents` |
+| `stop_agent` | not available. End the session, or let the run finish |
 | `resume` | spawn fresh and paste the earlier report into the brief |
 
 Pass `agentScope: "both"` whenever the agent you want lives in `.pi/agents/`.
@@ -45,6 +50,29 @@ Give each agent file one exact id, for example `model: magpie/codex/gpt-6-luna`.
 Check the id against `pi --list-models` before trusting it; a wrong id fails the
 subagent process instead of silently inheriting, which is the failure mode worth
 having.
+
+## A seat's `tools:` list is a full allowlist
+
+`--tools` with plain names replaces the whole selection, so a seat that writes
+`tools: read, grep, find, ls` gets exactly those four and nothing else. Every
+tool not named is off, built-in or extension alike: `edit`, `write`, `subagent`
+and `todo` are all gone.
+
+That is what makes `explorer`, `judge` and `reviewer` read-only in practice rather
+than on paper, and it is also the trap. A seat that needs an extension tool has to
+name it, and a seat written as `tools: read, bash` by someone expecting the rest
+to stay gets a child that can read and run shell commands and cannot call the tool
+it was meant to report through. The failure is silent: the tool is simply absent.
+
+Two spellings exist and cannot be mixed. `+name` and `-name` entries adjust the
+default selection instead of replacing it, so `tools: +grep, +find` keeps `read`,
+`bash`, `edit` and `write` and adds two. A list holding both a plain name and a
+`+`/`-` entry is rejected outright. Use the plain form for a read-only seat, where
+replacing everything is the point, and the `+`/`-` form when the defaults should
+survive.
+
+Verified on pi 1.3.0: an extension tool registered for the child is absent under
+`--tools read` and present under `--exclude-tools edit,write`.
 
 ## Paths
 
