@@ -195,11 +195,41 @@ playbook          /bug-fix /pause-safely…  23 个        ← 第四层
 
 ---
 
+## 十一又四分之一、Windows 上斜杠会被吃掉
+
+Git Bash（MSYS2）会把看起来像绝对路径的参数改写成 Windows 路径。所以在 Git Bash
+里敲 `/bug-fix`，pi 收到的是：
+
+```
+C:/Program Files/Git/bug-fix 修一下这个
+```
+
+它匹配不上任何路由，你就得到一个「命令不存在」的假象。真机验证过：模型有时能自己
+认出这是描述性文本并回到正轨，但那是运气，不是设计。
+
+三个解法，任选：
+
+```bash
+# 1. 关掉路径转换（只对这一次命令生效）
+MSYS_NO_PATHCONV=1 pi
+
+# 2. 用 PowerShell 或 Windows Terminal，它们不做这种改写
+# 3. 用 cmd.exe
+
+# 3. 完全绕开斜杠：让 pi 按语义自己选
+pi -p "按 bug-fix 的流程修这个：..."
+```
+
+`/skill:bug-fix` 同样会被改写，因为问题出在 shell，不在路由层。这是 Git Bash 的行为，
+不是这个包能修的。
+
+---
+
 ## 十一半、测这套命令本身
 
 ```bash
-node scripts/test-routes.mjs   # 35 项，零模型调用，一秒出结果
-bash scripts/check.sh          # doctor + 全部 9 个不花钱的测试脚本
+node scripts/test-routes.mjs   # 38 项，零模型调用，一秒出结果
+bash scripts/check.sh          # doctor + 全部 10 个不花钱的测试脚本
 ```
 
 `test-routes.mjs` 用 Node 24 直接 import 那个 `.ts` 扩展，喂输入、看输出。它验证的是**改写逻辑**：
@@ -209,6 +239,7 @@ bash scripts/check.sh          # doctor + 全部 9 个不花钱的测试脚本
 - `/poteto-mode` `/model` `/compact` `/routes` 和未知名字**不被改写**（前面的层赢）
 - `/routes` 列出每一个 playbook、每一类分组、每一句说明；表和数据目录不一致就红
 - 扩展自己发的消息不会被二次改写
+- `COMMANDS.md` 写了 Git Bash 的斜杠改写问题和三个解法
 
 不花钱，也不需要模型在跑。改完 `.pi/extensions/skill-routes.ts` 就跑它。
 

@@ -230,6 +230,29 @@ if (fs.existsSync(path.join(os.homedir(), ".agents", "skills"))) {
 	);
 }
 
+// --- the shell must not eat the leading slash ------------------------------
+//
+// Git Bash rewrites an argument that looks like an absolute path, so `/bug-fix`
+// arrives as `C:/Program Files/Git/bug-fix` and matches no route. The route layer
+// cannot fix that: by the time it sees the text, the slash is gone. What it can do
+// is say so where a person will read it, so the failure is a documented setup step
+// rather than a mystery.
+
+{
+	const doc = fs.readFileSync(path.join(root, "COMMANDS.md"), "utf8");
+	check("COMMANDS.md warns about the Git Bash path rewrite", /MSYS_NO_PATHCONV/.test(doc), "no MSYS_NO_PATHCONV anywhere");
+	check(
+		"COMMANDS.md names the symptom",
+		/Program Files\/Git/.test(doc),
+		"the rewritten form is not shown",
+	);
+	check(
+		"COMMANDS.md gives the Windows-shell alternative",
+		/Windows Terminal|PowerShell|cmd\.exe/.test(doc),
+		"no alternative named",
+	);
+}
+
 console.log();
 if (failed > 0) {
 	console.log(`routes: ${failed} failed`);

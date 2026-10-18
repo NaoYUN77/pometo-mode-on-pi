@@ -196,7 +196,7 @@ Edit the seat files, rerun `scripts/doctor.sh`.
 bash scripts/check.sh
 ```
 
-Doctor, then every test that spends no tokens: the routing surface (35 checks,
+Doctor, then every test that spends no tokens: the routing surface (38 checks,
 covering both `/routes` output paths), the bash guard (24), the subagent's output
 handling (28: the 50 KB cap never splits a character, and stdout split
 mid-character still decodes whole), the seat files (39), the kill escalation
@@ -388,7 +388,7 @@ pi --list-models
 bash scripts/check.sh
 ```
 
-跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
+跑 doctor，然后跑所有不花 token 的测试：命令路由（38 项，覆盖 `/routes` 的两条
 输出路径）、bash 守卫（24 项）、subagent 的输出处理（28 项：50 KB 截断不切开字符，
 stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、SIGKILL 兜底
 （11 项）、子进程协议（20 项：settle 之后才到的 steer 会报「没送进去」）、后台链路端到端
