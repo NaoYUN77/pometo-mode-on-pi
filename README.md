@@ -38,7 +38,7 @@ bash <package>/scripts/doctor.sh   # every seat's model id must resolve
 
 ### 项目里已经有同名扩展时
 
-项目如果自己带了 `todo.ts`、`subagent/` 或 gh 工具，注册的工具名跟这个包一样。
+项目如果自己带了 `todo.ts` 或 `subagent/`，注册的工具名跟这个包一样。
 pi 把这当加载期冲突，直接退出，stdout 一个字节都没有：
 
 ```
@@ -54,7 +54,7 @@ Error: Tool "todo" conflicts with /path/to/project/.pi/extensions/todo.ts
 
 ### If your project already ships these extensions
 
-A project that vendored `todo.ts`, `subagent/`, or the gh tools registers the same
+A project that vendored `todo.ts` or `subagent/` registers the same
 tool names this package does. pi treats that as a load-time conflict and exits
 with nothing on stdout:
 
@@ -85,17 +85,16 @@ so `read` and `bash` fail with `Cannot read properties of undefined`. Version
   (24 more skills)        ~150K
 .agents/harness/pi.md      8K   132 lines: Cursor to pi mapping
 .agents/pstack-models.md   8K   91 lines: role to model table
-docs/pi-equivalence.md     8K   24 rows: each CC mechanism, its provider here, its proof
+docs/pi-equivalence.md     8K   34 rows: each CC mechanism, its provider here, its proof
 .pi/extensions/          104K
   subagent/index.ts     1358 lines
   skill-routes.ts        340 lines
   todo.ts                301 lines
   bash-guard.ts          148 lines
-  gh/                    177 + 130 + 178 lines
-  lib/                   463 lines: project-tools, truncate, line-splitter, kill, pi-child
+  lib/                   460 lines: project-tools, truncate, line-splitter, kill, pi-child
 .pi/agents/               23K   7 seat files, 16 to 28 lines each
 .pi/prompts/               4K   /poteto-mode template
-scripts/                 132K  doctor, check, 11 zero-token test suites, 2 test doubles
+scripts/                 124K  doctor, check, 10 zero-token test suites, 2 test doubles
 ```
 
 ### Three layers
@@ -202,9 +201,9 @@ covering both `/routes` output paths), the bash guard (24), the subagent's outpu
 handling (28: the 50 KB cap never splits a character, and stdout split
 mid-character still decodes whole), the seat files (39), the kill escalation
 (11), the child protocol (20: a steer that arrives after the settle is reported
-as not delivered), the background path end to end (31, against a fake pi), the
-GitHub tool's pure half, the tool-name conflict guard (16), the equivalence table
-(100: every claim names a file that exists), and the README's numbers (20).
+as not delivered), the background path end to end (31, against a fake pi), the tool-name conflict
+guard (16), the equivalence table (113: every claim names a file that exists), and
+the README's numbers (20).
 Prints `check: green` or `check: RED`.
 
 ### Differences from pstack
@@ -281,17 +280,16 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
   （其余 24 个 skill）    ~150K
 .agents/harness/pi.md      8K   132 行：Cursor 到 pi 的映射
 .agents/pstack-models.md   8K   91 行：角色到模型表
-docs/pi-equivalence.md     8K   24 行：每条 CC 机制、它在 pi 上由谁提供、证据
+docs/pi-equivalence.md     8K   34 行：每条 CC 机制、它在 pi 上由谁提供、证据
 .pi/extensions/          104K
   subagent/index.ts     1358 行
   skill-routes.ts        340 行
   todo.ts                301 行
   bash-guard.ts          148 行
-  gh/                    177 + 130 + 178 行
-  lib/                   463 行：project-tools、truncate、line-splitter、kill、pi-child
+  lib/                   460 行：project-tools、truncate、line-splitter、kill、pi-child
 .pi/agents/               23K   7 个档位文件，每个 16 到 28 行
 .pi/prompts/               4K   /poteto-mode 模板
-scripts/                 132K  doctor、check、11 个不花钱的测试、2 个测试替身
+scripts/                 124K  doctor、check、10 个不花钱的测试、2 个测试替身
 ```
 
 ### 三层结构
@@ -394,8 +392,8 @@ bash scripts/check.sh
 输出路径）、bash 守卫（24 项）、subagent 的输出处理（28 项：50 KB 截断不切开字符，
 stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、SIGKILL 兜底
 （11 项）、子进程协议（20 项：settle 之后才到的 steer 会报「没送进去」）、后台链路端到端
-（31 项，对着一个假 pi）、GitHub 工具里不碰网络的那一半、工具名冲突（16 项）、等价表
-（100 项：每条声明都得指向一个真实存在的文件）、README 里的每个数字（20 项）。打印
+（31 项，对着一个假 pi）、工具名冲突（16 项）、等价表（113 项：每条声明都得指向一个
+真实存在的文件）、README 里的每个数字（20 项）。打印
 `check: green` 或 `check: RED`。
 
 ### 与 pstack 的差异

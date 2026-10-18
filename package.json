@@ -20,7 +20,6 @@
       "./.pi/extensions/skill-routes.ts",
       "./.pi/extensions/todo.ts",
       "./.pi/extensions/bash-guard.ts",
-      "./.pi/extensions/gh",
       "./.pi/extensions/subagent"
     ],
     "skills": [
@@ -38,6 +37,6 @@
     "typebox": "*"
   },
   "scripts": {
-    "test": "node scripts/test-routes.mjs && node scripts/test-bash-guard.mjs && node scripts/test-subagent-output.mjs && node scripts/test-seats.mjs && node scripts/test-kill.mjs && node scripts/test-child.mjs && node scripts/test-background.mjs && node scripts/verify-gh-tool.mjs && node scripts/test-tool-conflicts.mjs && node scripts/verify-equivalence.mjs && node scripts/verify-readme.mjs"
+    "test": "node scripts/test-routes.mjs && node scripts/test-bash-guard.mjs && node scripts/test-subagent-output.mjs && node scripts/test-seats.mjs && node scripts/test-kill.mjs && node scripts/test-child.mjs && node scripts/test-background.mjs && node scripts/test-tool-conflicts.mjs && node scripts/verify-equivalence.mjs && node scripts/verify-readme.mjs"
   }
 }

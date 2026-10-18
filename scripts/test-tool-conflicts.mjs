@@ -74,12 +74,11 @@ const cwdBefore = process.cwd();
 	fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// A directory form counts too, since that is how subagent and gh ship.
+// A directory form counts too, since that is how subagent ships.
 {
-	const dir = project(["subagent/index.ts", "gh/index.ts"]);
+	const dir = project(["subagent/index.ts"]);
 	process.chdir(dir);
 	check("subagent/index.ts owns subagent", projectOwnsTool("subagent", pkgDir));
-	check("gh/index.ts owns every gh tool", projectOwnsTool("gh_issue_list", pkgDir) && projectOwnsTool("gh_pr_create", pkgDir));
 	process.chdir(cwdBefore);
 	fs.rmSync(dir, { recursive: true, force: true });
 }
@@ -115,12 +114,21 @@ const cwdBefore = process.cwd();
 // first. That check is what keeps the conflict from happening at all.
 for (const [file, toolName] of [
 	[".pi/extensions/todo.ts", "todo"],
-	[".pi/extensions/gh/index.ts", "gh_issue_list"],
 	[".pi/extensions/subagent/index.ts", "subagent"],
 ]) {
 	const body = fs.readFileSync(path.join(root, file), "utf8");
 	check(`${file} asks before registering`, body.includes(`projectOwnsTool("${toolName}"`), "no projectOwnsTool guard");
 }
+
+// This package ships no GitHub tools. pstack's playbooks drive the `gh` CLI
+// through `bash`, so a gh_* tool would be a second, narrower surface for the same
+// thing — and one more name to collide with a project's own extension.
+check("no gh extension is shipped", !fs.existsSync(path.join(root, ".pi", "extensions", "gh")));
+check(
+	"no gh tool is claimed as owned",
+	!Object.keys(await import(pathToFileURL(path.join(root, ".pi", "lib", "project-tools.ts")).href).then((m) => m)).length ||
+		!fs.readFileSync(path.join(root, ".pi", "lib", "project-tools.ts"), "utf8").includes("gh_"),
+);
 
 // The helper must live outside extensions/, where pi would load it as an
 // extension and reject it for having no factory.
@@ -129,7 +137,7 @@ check("the helper exists in .pi/lib/", fs.existsSync(path.join(root, ".pi", "lib
 
 // The deferred-registration approach that broke every built-in tool must not come
 // back. Its marker is a registerTool call inside a session_start handler.
-for (const file of [".pi/extensions/todo.ts", ".pi/extensions/gh/index.ts", ".pi/extensions/subagent/index.ts"]) {
+for (const file of [".pi/extensions/todo.ts", ".pi/extensions/subagent/index.ts"]) {
 	const body = fs.readFileSync(path.join(root, file), "utf8");
 	check(`${file} does not defer registration to session_start`, !body.includes("registerToolsWhenFree"));
 }

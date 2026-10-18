@@ -20,15 +20,6 @@ if [ -f scripts/test-routes.mjs ]; then
   fi
 fi
 
-# The gh tool's pure half, checked without a model call or a GitHub token.
-if [ -f scripts/verify-gh-tool.mjs ]; then
-  echo
-  echo "--- gh tool ---"
-  if ! node scripts/verify-gh-tool.mjs; then
-    rc=1
-  fi
-fi
-
 # The bash guard, which stops an unbounded search from hanging the session.
 if [ -f scripts/test-bash-guard.mjs ]; then
   echo

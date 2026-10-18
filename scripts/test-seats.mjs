@@ -7,8 +7,8 @@
  * `--tools` with plain names REPLACES the whole selection. It is not a filter on
  * top of the defaults: every tool not named, built-in or extension, is off. That
  * is what makes a read-only seat actually read-only — and what makes a seat that
- * needs `gh_issue_list` fail with no explanation if someone writes `tools: read,
- * bash` and expects the rest to stay.
+ * needs an extension tool fails with no explanation if someone writes `tools:
+ * read, bash` and expects the rest to stay.
  *
  * Verified against pi 1.3.0: an extension tool is absent from the child's tool
  * list when `--tools read` is passed, and present when `--exclude-tools` is used

@@ -55,14 +55,14 @@ having.
 
 `--tools` with plain names replaces the whole selection, so a seat that writes
 `tools: read, grep, find, ls` gets exactly those four and nothing else. Every
-tool not named is off, built-in or extension alike: `edit`, `write`, `subagent`,
-`todo`, and every `gh_*` tool are all gone.
+tool not named is off, built-in or extension alike: `edit`, `write`, `subagent`
+and `todo` are all gone.
 
 That is what makes `explorer`, `judge` and `reviewer` read-only in practice rather
 than on paper, and it is also the trap. A seat that needs an extension tool has to
 name it, and a seat written as `tools: read, bash` by someone expecting the rest
-to stay gets a child that can read and run shell commands and cannot call
-`gh_issue_list` to report back. The failure is silent: the tool is simply absent.
+to stay gets a child that can read and run shell commands and cannot call the tool
+it was meant to report through. The failure is silent: the tool is simply absent.
 
 Two spellings exist and cannot be mixed. `+name` and `-name` entries adjust the
 default selection instead of replacing it, so `tools: +grep, +find` keeps `read`,
