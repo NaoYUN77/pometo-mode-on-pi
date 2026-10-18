@@ -83,18 +83,18 @@ so `read` and `bash` fail with `Cannot read properties of undefined`. Version
   interrogate/            32K   74 lines + rubric and reviewer prompt
   principle-*/            81K   24 rules, 434 lines total
   (24 more skills)        ~150K
-.agents/harness/pi.md      8K   132 lines: Cursor to pi mapping
-.agents/pstack-models.md   8K   91 lines: role to model table
+.agents/harness/pi.md      8K   144 lines: Cursor to pi mapping
+.agents/pstack-models.md   8K   96 lines: role to model table
 docs/pi-equivalence.md     8K   34 rows: each CC mechanism, its provider here, its proof
 .pi/extensions/          104K
-  subagent/index.ts     1358 lines
+  subagent/index.ts     1387 lines
   skill-routes.ts        340 lines
   todo.ts                301 lines
   bash-guard.ts          148 lines
-  lib/                   460 lines: project-tools, truncate, line-splitter, kill, pi-child
-.pi/agents/               23K   7 seat files, 16 to 28 lines each
+  lib/                   526 lines: project-tools, truncate, line-splitter, kill, pi-child, model-resolve
+.pi/agents/               23K   7 seat files, 18 to 30 lines each
 .pi/prompts/               4K   /poteto-mode template
-scripts/                 124K  doctor, check, 10 zero-token test suites, 2 test doubles
+scripts/                 160K  doctor, check, 11 zero-token test suites, 2 test doubles
 ```
 
 ### Three layers
@@ -180,15 +180,31 @@ one. A program that outlives any single agent routes to `/orchestrate`.
 
 ### Configure models
 
-Every role names a model in `.agents/pstack-models.md`, and each seat file carries
-one `model:` id. Check an id against `pi --list-models` before writing it: a wrong
-id fails the subagent process instead of silently inheriting.
+Every role names a model in `.agents/pstack-models.md`. A seat file's `model:`
+takes either form:
+
+- **An id, `provider/name`** — `model: magpie/codex/gpt-6-luna`. Sent to pi as is.
+- **A short name** — `model: gpt`, defined in the seat's own `models:` block, one
+  `name: provider/name` per line. The name is matched case-insensitively; the id
+  it stands for is what reaches pi.
+
+A short name the block does not define is refused before pi starts, naming the
+names the block does define. A missing `model:` or `model: none` inherits the
+parent session's model, as before. Check an id against `pi --list-models`:
+a wrong id fails the subagent process instead of silently inheriting.
+
+```yaml
+model: gpt
+models:
+  gpt: magpie/codex/gpt-6-luna
+```
 
 ```bash
 pi --list-models
 ```
 
-Edit the seat files, rerun `scripts/doctor.sh`.
+Edit the seat files, rerun `scripts/doctor.sh`, which resolves short names
+before checking the catalog.
 
 ### Verify
 
@@ -196,12 +212,14 @@ Edit the seat files, rerun `scripts/doctor.sh`.
 bash scripts/check.sh
 ```
 
-Doctor, then every test that spends no tokens: the routing surface (35 checks,
+Doctor, then every test that spends no tokens: the routing surface (38 checks,
 covering both `/routes` output paths), the bash guard (24), the subagent's output
 handling (28: the 50 KB cap never splits a character, and stdout split
-mid-character still decodes whole), the seat files (39), the kill escalation
-(11), the child protocol (20: a steer that arrives after the settle is reported
-as not delivered), the background path end to end (31, against a fake pi), the tool-name conflict
+mid-character still decodes whole), the seat files (39), the model resolution (28:
+a short name resolves to its id, an id passes through, an undefined name is refused
+before pi starts), the kill escalation (11), the child protocol (20: a steer that
+arrives after the settle is reported as not delivered), the background path end to
+end (31, against a fake pi), the tool-name conflict
 guard (16), the equivalence table (113: every claim names a file that exists), and
 the README's numbers (20).
 Prints `check: green` or `check: RED`.
@@ -223,6 +241,9 @@ row-by-row table, including what is missing and why no workflow needs it.
   travels on stdin, not argv. A run that already settled cannot be resumed, only
   replaced.
 - **Seats are per-project.** pi packages cannot ship `agents/`.
+- **A seat's model is a name or an id.** `model: gpt` is looked up in the seat's
+  own `models:` block; `model: magpie/codex/gpt-6-luna` passes through. A short
+  name the block does not define is refused before pi starts.
 - **`/routes` instead of a marketplace.** Nothing is copied; the list is rebuilt
   from the tree on every load.
 
@@ -278,18 +299,18 @@ bash <package>/scripts/doctor.sh   # 每个档位的 model id 都必须能查到
   interrogate/            32K   74 行 + 评分表和审阅者提示词
   principle-*/            81K   24 条规则，共 434 行
   （其余 24 个 skill）    ~150K
-.agents/harness/pi.md      8K   132 行：Cursor 到 pi 的映射
-.agents/pstack-models.md   8K   91 行：角色到模型表
+.agents/harness/pi.md      8K   144 行：Cursor 到 pi 的映射
+.agents/pstack-models.md   8K   96 行：角色到模型表
 docs/pi-equivalence.md     8K   34 行：每条 CC 机制、它在 pi 上由谁提供、证据
 .pi/extensions/          104K
-  subagent/index.ts     1358 行
+  subagent/index.ts     1387 行
   skill-routes.ts        340 行
   todo.ts                301 行
   bash-guard.ts          148 行
-  lib/                   460 行：project-tools、truncate、line-splitter、kill、pi-child
-.pi/agents/               23K   7 个档位文件，每个 16 到 28 行
+  lib/                   526 行：project-tools、truncate、line-splitter、kill、pi-child、model-resolve
+.pi/agents/               23K   7 个档位文件，每个 19 到 31 行
 .pi/prompts/               4K   /poteto-mode 模板
-scripts/                 124K  doctor、check、10 个不花钱的测试、2 个测试替身
+scripts/                 160K  doctor、check、11 个不花钱的测试、2 个测试替身
 ```
 
 ### 三层结构
@@ -372,15 +393,28 @@ Hillclimb 是那个循环，并且对尝试次数设了下限，免得一次早�
 
 ### 配置模型
 
-每个角色在 `.agents/pstack-models.md` 里指定模型，每个档位文件带一个 `model:` id。
-写之前用 `pi --list-models` 核对：id 写错会让 subagent 进程直接失败，而不是悄悄用
-父会话的模型。
+每个角色在 `.agents/pstack-models.md` 里指定模型。档位文件的 `model:` 两种写法都行：
+
+- **完整 id，`provider/name`** —— `model: magpie/codex/gpt-6-luna`，原样交给 pi。
+- **短名字** —— `model: gpt`，在档位自己的 `models:` 块里定义，一行一个
+  `名字: provider/name`。名字不区分大小写，查到的 id 才是交给 pi 的东西。
+
+块里没定义的短名字会在 pi 启动前被拒掉，报错里列出块里定义了的名字。不写
+`model:` 或写 `model: none`，照旧继承父会话的模型。完整 id 用
+`pi --list-models` 核对：id 写错会让 subagent 进程直接失败，而不是悄悄用父会话的
+模型。
+
+```yaml
+model: gpt
+models:
+  gpt: magpie/codex/gpt-6-luna
+```
 
 ```bash
 pi --list-models
 ```
 
-改完档位文件，重跑 `scripts/doctor.sh`。
+改完档位文件，重跑 `scripts/doctor.sh`，它先把短名字解析成 id 再对目录。
 
 ### 验证
 
@@ -388,9 +422,10 @@ pi --list-models
 bash scripts/check.sh
 ```
 
-跑 doctor，然后跑所有不花 token 的测试：命令路由（35 项，覆盖 `/routes` 的两条
+跑 doctor，然后跑所有不花 token 的测试：命令路由（38 项，覆盖 `/routes` 的两条
 输出路径）、bash 守卫（24 项）、subagent 的输出处理（28 项：50 KB 截断不切开字符，
-stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、SIGKILL 兜底
+stdout 在多字节字符中间被切开也能完整解码）、档位文件（39 项）、模型解析（28 项：
+短名字解析成 id、id 原样穿过、没定义的名字在 pi 启动前被拒）、SIGKILL 兜底
 （11 项）、子进程协议（20 项：settle 之后才到的 steer 会报「没送进去」）、后台链路端到端
 （31 项，对着一个假 pi）、工具名冲突（16 项）、等价表（113 项：每条声明都得指向一个
 真实存在的文件）、README 里的每个数字（20 项）。打印
@@ -412,6 +447,8 @@ stdout 在多字节字符中间被切开也能完整解码）、档位文件（3
   `send_message` 能在它跑的时候插手；提示词走 stdin，不走 argv。已经结束的 run 不能续跑，
   只能重开一个。
 - **档位按项目放。** pi 包带不了 `agents/`。
+- **档位的模型可以写名字，也可以写 id。** `model: gpt` 在档位自己的 `models:` 块里
+  查；`model: magpie/codex/gpt-6-luna` 原样穿过。块里没定义的短名字在 pi 启动前被拒。
 - **用 `/routes` 代替插件市场。** 没有拷贝，列表每次加载从目录重建。
 
 ### 许可

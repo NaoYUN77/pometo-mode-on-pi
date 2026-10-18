@@ -1,7 +1,9 @@
 ---
 name: judge
 description: Read-only arena cross-judge. Scores candidates against a rubric it did not write and recommends a base.
-model: magpie/opencode-zen/glm-5.3-flash-free
+model: glm
+models:
+  glm: magpie/opencode-zen/glm-5.3-flash-free
 tools: read, grep, find, ls
 ---
 

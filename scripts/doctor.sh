@@ -29,6 +29,8 @@ fi
 
 # 3. Every seat names a model the catalog serves. Seats are found where pi reads
 #    them: the project first, then the user directory. A package cannot ship them.
+#    A seat may also name a short name from its own `models:` block; the id that
+#    resolves to is what has to be in the catalog.
 AGENT_DIRS=""
 [ -d .pi/agents ] && AGENT_DIRS=".pi/agents"
 [ -d "$HOME/.pi/agent/agents" ] && AGENT_DIRS="$AGENT_DIRS $HOME/.pi/agent/agents"
@@ -42,10 +44,24 @@ else
     for f in "$dir"/*.md; do
       [ -e "$f" ] || continue
       count=$((count + 1))
+      seat=$(basename "$f" .md)
       m=$(sed -n 's/^model:[[:space:]]*//p' "$f" | head -1)
-      if [ -z "$m" ]; then bad_seat="$bad_seat $(basename "$f" .md)=none"; continue; fi
+      if [ -z "$m" ]; then bad_seat="$bad_seat $seat=none"; continue; fi
+      case "$m" in
+        */*) ;;
+        none|None)
+          continue ;;
+        *)
+          hit=$(awk -v key="$m" '
+            /^[[:space:]]*[A-Za-z0-9_.-]+:/ { name=$1; sub(/:$/, "", name); value=$2; id[tolower(name)]=value }
+            END { for (k in id) if (k == tolower(key)) { print id[k]; exit } }
+          ' "$f")
+          if [ -z "$hit" ]; then bad_seat="$bad_seat $seat=$m(no such short name)"; continue; fi
+          m=$hit
+          ;;
+      esac
       if [ -n "$models" ] && ! printf '%s\n' "$models" | grep -qx -- "$m"; then
-        bad_seat="$bad_seat $(basename "$f" .md)=$m"
+        bad_seat="$bad_seat $seat=$m"
       fi
     done
   done

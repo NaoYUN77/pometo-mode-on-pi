@@ -56,7 +56,7 @@ all fail the build.
 | C03 | `CLAUDE.md` instructions file | `AGENTS.md` or `CLAUDE.md` per directory, plus `~/.pi/agent/AGENTS.md` | native | — | — |
 | C04 | `.claude/skills/` project skills | `.agents/skills/`, discovered from the working directory up to the repo root | native | — | — |
 | C05 | `.claude/agents/` seat files | `.pi/agents/`, read by the `subagent` tool | extension | `.pi/extensions/subagent/agents.ts` | — |
-| C06 | `~/.cursor/rules/pstack-models.mdc` role table | `.agents/pstack-models.md`, and one `model:` per seat file | mapping | `.agents/pstack-models.md` | — |
+| C06 | `~/.cursor/rules/pstack-models.mdc` role table | `.agents/pstack-models.md`, and one `model:` per seat file: a `provider/name` id, or a short name defined in the seat's own `models:` block. A short name the block does not define is refused before pi starts | extension | `.agents/pstack-models.md`, `.pi/lib/model-resolve.ts`, `.pi/extensions/subagent/agents.ts` | — |
 | C07 | `~/.claude/projects` transcripts | `~/.pi/agent/sessions/<project>/` | mapping | `.pi/extensions/bash-guard.ts` | — |
 | C08 | `agent-transcripts/` named by the system prompt | No such directory exists; `.agents/harness/pi.md` gives the real path | difference | — | The four skills that name it are pointed at the sessions directory instead. A search from the filesystem root used to hang the session, which is why the bash guard exists. |
 | C09 | `CLAUDE_PLUGIN_ROOT` | Resolved from each extension's own `import.meta.dirname` | extension | `.pi/extensions/skill-routes.ts`, `.pi/lib/project-tools.ts` | — |

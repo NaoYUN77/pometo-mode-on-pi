@@ -1,7 +1,9 @@
 ---
 name: runner-b
 description: Arena candidate seat on the GLM family.
-model: magpie/opencode-zen/glm-5.3-flash-free
+model: glm
+models:
+  glm: magpie/opencode-zen/glm-5.3-flash-free
 ---
 
 You are one candidate in an arena. Other candidates answer the same prompt on

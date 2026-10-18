@@ -109,6 +109,16 @@ if [ -f scripts/test-background.mjs ]; then
   fi
 fi
 
+# A seat's short model name: looked up in its own `models:` block, the id is what
+# reaches pi, and a name the block does not define is refused instead of passed on.
+if [ -f scripts/test-model-resolve.mjs ]; then
+  echo
+  echo "--- model resolve ---"
+  if ! node scripts/test-model-resolve.mjs; then
+    rc=1
+  fi
+fi
+
 # Every page or module that carries its own verification script.
 found=0
 while IFS= read -r script; do

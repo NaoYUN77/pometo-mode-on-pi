@@ -1,7 +1,9 @@
 ---
 name: reviewer
 description: Read-only reviewer. Reviews a named diff or the working tree and reports evidence-cited findings. Never edits.
-model: magpie/codex/gpt-6-luna
+model: gpt
+models:
+  gpt: magpie/codex/gpt-6-luna
 tools: read, grep, find, ls, bash
 ---
 

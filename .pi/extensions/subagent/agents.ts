@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { CONFIG_DIR_NAME, getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { type ModelTable, parseModelTable, resolveModel } from "../../lib/model-resolve.ts";
 
 export type AgentScope = "user" | "project" | "both";
 
@@ -12,7 +13,12 @@ export interface AgentConfig {
 	name: string;
 	description: string;
 	tools?: string[];
+	/** The `model:` value as written, a short name or an id. */
 	model?: string;
+	/** The id `model:` resolves to, or undefined when the seat inherits. */
+	modelId?: string;
+	/** Short name to id, from the seat's `models:` block. */
+	models: ModelTable;
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
@@ -36,6 +42,7 @@ type AgentFrontmatter = {
 	description?: unknown;
 	tools?: unknown;
 	model?: unknown;
+	models?: unknown;
 };
 
 /**
@@ -91,11 +98,17 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			continue;
 		}
 
+		const model = typeof frontmatter.model === "string" ? frontmatter.model : undefined;
+		const models = parseModelTable(frontmatter.models);
+		const resolved = resolveModel(model, models);
+
 		agents.push({
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools: parseToolList(frontmatter.tools),
-			model: typeof frontmatter.model === "string" ? frontmatter.model : undefined,
+			model,
+			modelId: resolved.kind === "model" ? resolved.model : undefined,
+			models,
 			systemPrompt: body,
 			source,
 			filePath,
@@ -143,7 +156,9 @@ export function discoverAgents(cwd: string, scope: AgentScope): AgentDiscoveryRe
 		for (const agent of projectAgents) agentMap.set(agent.name, agent);
 	}
 
-	return { agents: Array.from(agentMap.values()), projectAgentsDir };
+	const final = Array.from(agentMap.values());
+
+	return { agents: final, projectAgentsDir };
 }
 
 export function formatAgentList(agents: AgentConfig[], maxItems: number): { text: string; remaining: number } {
